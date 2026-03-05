@@ -8,7 +8,7 @@ load_dotenv()
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql://postgres:123456@localhost:5432/face_attendance"
+    "postgresql://face_attendance_q4wz_user:3LTRdfQIReuWCZg8mF5LQaomuck8gZSq@dpg-d6kkkgvpm1nc73f0v2qg-a.singapore-postgres.render.com/face_attendance_q4wz?sslmode=require"
 )
 
 engine = create_engine(DATABASE_URL)
