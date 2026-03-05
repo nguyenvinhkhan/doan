@@ -8,7 +8,26 @@ import models  # noqa: F401
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Tạo bảng nếu chưa có
     Base.metadata.create_all(bind=engine)
+    # Tạo tài khoản admin mặc định nếu chưa có
+    from database import SessionLocal
+    from auth import hash_password
+    db = SessionLocal()
+    try:
+        if not db.query(models.User).filter(models.User.username == "admin").first():
+            admin = models.User(
+                username="admin",
+                email="admin@.com",
+                password=hash_password("123456"),
+                role="admin",
+                is_active=True,
+            )
+            db.add(admin)
+            db.commit()
+            print("[INIT] Tạo tài khoản admin: admin / 123456")
+    finally:
+        db.close()
     yield
 
 app = FastAPI(
