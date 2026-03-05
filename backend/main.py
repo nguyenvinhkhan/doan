@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from database import Base, engine
-from routes import auth_route, employee_route, attendance_route, config_route, public_route, export_route
+from routes import auth_route, employee_route, attendance_route, config_route, public_route, export_route, proxy_route
 from websocket import router as ws_router
 import models  # noqa: F401
 
@@ -18,14 +18,14 @@ async def lifespan(app: FastAPI):
         if not db.query(models.User).filter(models.User.username == "admin").first():
             admin = models.User(
                 username="admin",
-                email="admin@.com",
+                email="admin@faceattend.com",
                 password=hash_password("123456"),
                 role="admin",
                 is_active=True,
             )
             db.add(admin)
             db.commit()
-            print("[INIT] Tạo tài khoản admin: admin / 123456")
+            print("[INIT] Tạo tài khoản admin: admin / Admin@123")
     finally:
         db.close()
     yield
@@ -52,6 +52,8 @@ app.include_router(attendance_route.router, prefix="/api/attendance", tags=["Att
 app.include_router(config_route.router,     prefix="/api/configs",    tags=["Configs"])
 
 app.include_router(export_route.router,     prefix="/api/export",     tags=["Export"])
+
+app.include_router(proxy_route.router, prefix="/proxy", tags=["Proxy"])
 
 # Route công khai (không cần đăng nhập)
 app.include_router(public_route.router,     prefix="/public",         tags=["Public"])

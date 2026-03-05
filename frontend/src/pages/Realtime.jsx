@@ -2,6 +2,16 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { publicApi } from "../api/axios";
 
 const WS_URL = (import.meta.env.VITE_WS_URL || "ws://localhost:8000/ws") + "/attendance";
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
+
+// Nếu URL camera là HTTP nhưng trang chạy HTTPS → dùng proxy backend
+function getStreamUrl(url) {
+  if (!url) return url;
+  if (window.location.protocol === "https:" && url.startsWith("http://")) {
+    return `${API_BASE}/proxy/stream?url=${encodeURIComponent(url)}`;
+  }
+  return url;
+}
 
 export default function Realtime() {
   const videoRef    = useRef(null);
@@ -75,7 +85,7 @@ export default function Realtime() {
     if (!ipUrl) return;
     stopCamera();
     videoRef.current.srcObject = null;
-    videoRef.current.src = ipUrl;
+    videoRef.current.src = getStreamUrl(ipUrl);
     videoRef.current.play().catch(() => {});
     setStream(true);
     setShowIpForm(false);
