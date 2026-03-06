@@ -48,10 +48,14 @@ export default function Admin() {
     setSaving(true); setSaveMsg("");
     try {
       await api.put(`/configs/${key}`, { value });
-      setSaveMsg("✅ Lưu thành công!");
-      setTimeout(() => setSaveMsg(""), 3000);
-    } catch {
-      setSaveMsg("❌ Lưu thất bại!");
+      // Reload lại toàn bộ config để đảm bảo UI đồng bộ với database
+      const r = await api.get("/configs/");
+      setConfigs(r.data);
+      setSaveMsg(`✅ Đã lưu: ${key} = ${value}`);
+      setTimeout(() => setSaveMsg(""), 4000);
+    } catch (err) {
+      const detail = err.response?.data?.detail || "Lỗi không xác định";
+      setSaveMsg(`❌ Lưu thất bại: ${detail}`);
     } finally {
       setSaving(false);
     }
@@ -61,10 +65,14 @@ export default function Admin() {
     setSaving(true); setSaveMsg("");
     try {
       await Promise.all(configs.map(c => api.put(`/configs/${c.key}`, { value: c.value })));
+      // Reload để đồng bộ với database
+      const r = await api.get("/configs/");
+      setConfigs(r.data);
       setSaveMsg("✅ Đã lưu tất cả cấu hình!");
-      setTimeout(() => setSaveMsg(""), 3000);
-    } catch {
-      setSaveMsg("❌ Lưu thất bại!");
+      setTimeout(() => setSaveMsg(""), 4000);
+    } catch (err) {
+      const detail = err.response?.data?.detail || "Lỗi không xác định";
+      setSaveMsg(`❌ Lưu thất bại: ${detail}`);
     } finally {
       setSaving(false);
     }
@@ -235,8 +243,8 @@ export default function Admin() {
                   📌 Nhân viên check-in sau{" "}
                 </span>
                 <span style={{ color: "#ffd600", fontWeight: 700, fontSize: "15px" }}>
-                  {String(configs.find(c => c.key === "late_hour")?.value || "8").padStart(2, "0")}:
-                  {String(configs.find(c => c.key === "late_minute")?.value || "30").padStart(2, "0")}
+                  {String(configs.find(c => c.key === "late_hour")?.value ?? "8").padStart(2, "0")}:
+                  {String(configs.find(c => c.key === "late_minute")?.value ?? "30").padStart(2, "0")}
                 </span>
                 <span style={{ color: "rgba(255,255,255,0.4)", fontSize: "13px" }}>
                   {" "}sẽ bị đánh dấu <span style={{ color: "#ffd600" }}>ĐI TRỄ</span>

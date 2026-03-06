@@ -91,7 +91,25 @@ def update_config(
     """Cập nhật giá trị cấu hình theo key."""
     value = payload.get("value")
     if value is None:
-        return {"error": "Thiếu giá trị"}
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Thiếu giá trị value")
+    
+    # Validate giá trị
+    if key in ["late_hour"] and not str(value).isdigit():
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Giờ phải là số nguyên (0-23)")
+    if key in ["late_minute"] and not str(value).isdigit():
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Phút phải là số nguyên (0-59)")
+    if key == "face_threshold":
+        try:
+            v = float(value)
+            if not (0.0 <= v <= 1.0):
+                from fastapi import HTTPException
+                raise HTTPException(status_code=400, detail="Ngưỡng phải từ 0.0 đến 1.0")
+        except ValueError:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=400, detail="Ngưỡng phải là số thực")
 
     record = db.query(models.SystemConfig).filter(
         models.SystemConfig.key == key
@@ -105,4 +123,11 @@ def update_config(
         db.add(models.SystemConfig(key=key, value=str(value), label=label))
 
     db.commit()
-    return {"message": "Cập nhật thành công", "key": key, "value": value}
+    if record:
+        db.refresh(record)
+    return {
+        "message": "Cập nhật thành công",
+        "key": key,
+        "value": str(value),
+        "updated_at": record.updated_at if record else None
+    }

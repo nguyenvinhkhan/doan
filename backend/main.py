@@ -19,7 +19,7 @@ async def lifespan(app: FastAPI):
             admin = models.User(
                 username="admin",
                 email="admin@faceattend.com",
-                password=hash_password("123456"),
+                password=hash_password("Admin@123"),
                 role="admin",
                 is_active=True,
             )
@@ -28,6 +28,16 @@ async def lifespan(app: FastAPI):
             print("[INIT] Tạo tài khoản admin: admin / Admin@123")
     finally:
         db.close()
+
+    # Khởi tạo cấu hình mặc định
+    from routes.config_route import init_default_configs
+    db2 = SessionLocal()
+    try:
+        init_default_configs(db2)
+        print("[INIT] Khởi tạo cấu hình mặc định xong")
+    finally:
+        db2.close()
+
     yield
 
 app = FastAPI(
