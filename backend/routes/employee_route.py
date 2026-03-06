@@ -4,7 +4,7 @@ from sqlalchemy import or_
 from typing import List, Optional
 from database import get_db
 from schemas import EmployeeCreate, EmployeeUpdate, EmployeeOut
-from auth import get_current_user, require_admin
+from auth import get_current_user, require_admin, hash_password
 from ai.detector import get_face_encoding
 import models
 import json
@@ -47,8 +47,29 @@ def create_employee(
     ).first():
         raise HTTPException(status_code=400, detail="Mã nhân viên đã tồn tại")
 
-    employee = models.Employee(**payload.model_dump())
+    emp_data = payload.model_dump()
+    employee = models.Employee(**emp_data)
     db.add(employee)
+    db.flush()  # để lấy employee.id
+
+    # Tự động tạo tài khoản cho nhân viên
+    # username = mã nhân viên (viết thường), password mặc định = mã nhân viên
+    username = payload.employee_code.lower()
+    emp_email = payload.email or f"{username}@faceattend.local"
+
+    # Kiểm tra username chưa tồn tại
+    existing_user = db.query(models.User).filter(models.User.username == username).first()
+    if not existing_user:
+        emp_user = models.User(
+            username=username,
+            email=emp_email,
+            password=hash_password("123456"),  # mật khẩu mặc định
+            role="employee",
+            is_active=True,
+            employee_id=employee.id,
+        )
+        db.add(emp_user)
+
     db.commit()
     db.refresh(employee)
     return employee
@@ -106,9 +127,13 @@ def register_face(
     employee_id: int,
     payload: dict,
     db: Session = Depends(get_db),
-    _=Depends(require_admin),
+    current_user=Depends(get_current_user),
 ):
-    """Register / update face encoding for an employee."""
+    """Đăng ký khuôn mặt - Admin đăng ký bất kỳ ai, nhân viên chỉ đăng ký của mình."""
+    # Kiểm tra quyền: admin hoặc chính nhân viên đó
+    if current_user.role not in ("admin",):
+        if current_user.employee_id != employee_id:
+            raise HTTPException(status_code=403, detail="Bạn chỉ có thể đăng ký khuôn mặt của chính mình")
     emp = db.query(models.Employee).filter(models.Employee.id == employee_id).first()
     if not emp:
         raise HTTPException(status_code=404, detail="Không tìm thấy nhân viên")
@@ -133,3 +158,28 @@ def register_face(
 def get_departments(db: Session = Depends(get_db), _=Depends(get_current_user)):
     rows = db.query(models.Employee.department).distinct().all()
     return [r[0] for r in rows if r[0]]
+
+
+@router.get("/me/profile")
+def get_my_profile(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Nhân viên xem thông tin của chính mình."""
+    if current_user.role != "employee":
+        raise HTTPException(status_code=403, detail="Chỉ dành cho nhân viên")
+    if not current_user.employee_id:
+        raise HTTPException(status_code=404, detail="Không tìm thấy hồ sơ nhân viên")
+    emp = db.query(models.Employee).filter(
+        models.Employee.id == current_user.employee_id
+    ).first()
+    if not emp:
+        raise HTTPException(status_code=404, detail="Không tìm thấy nhân viên")
+    return {
+        "id": emp.id,
+        "employee_code": emp.employee_code,
+        "full_name": emp.full_name,
+        "department": emp.department,
+        "position": emp.position,
+        "has_face": emp.has_face,
+    }
