@@ -3,7 +3,17 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import Optional
-from datetime import datetime, date
+from datetime import datetime, date, timezone, timedelta
+
+VN_TZ = timezone(timedelta(hours=7))  # UTC+7
+
+def _to_vn(dt):
+    """Chuyển datetime từ UTC sang giờ Việt Nam."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(VN_TZ)
 from io import BytesIO
 from database import get_db
 from auth import get_current_user
@@ -114,10 +124,10 @@ def export_attendance(
         _apply_cell(ws1.cell(row=row, column=4), emp.department if emp else "-", fill=fill)
         _apply_cell(ws1.cell(row=row, column=5), rec.date, align="center", fill=fill)
         _apply_cell(ws1.cell(row=row, column=6),
-                    rec.check_in.strftime("%H:%M:%S") if rec.check_in else "-",
+                    _to_vn(rec.check_in).strftime("%H:%M:%S") if rec.check_in else "-",
                     align="center", fill=fill)
         _apply_cell(ws1.cell(row=row, column=7),
-                    rec.check_out.strftime("%H:%M:%S") if rec.check_out else "-",
+                    _to_vn(rec.check_out).strftime("%H:%M:%S") if rec.check_out else "-",
                     align="center", fill=fill)
         status_col = ws1.cell(row=row, column=8)
         label = status_labels.get(rec.status, rec.status)
