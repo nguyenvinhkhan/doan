@@ -129,8 +129,18 @@ export default function Realtime() {
       const event = { ...data, success: true, timestamp: new Date().toISOString() };
       setResult(event);
       setFeed(prev => [event, ...prev].slice(0, 30));
+      // Tắt autoScan sau check-in/check-out thành công, tránh quét lại ngay
+      setAutoScan(false);
+      // Tự động bật lại sau 10 giây
+      setTimeout(() => setAutoScan(true), 10000);
     } catch (err) {
-      setResult({ success: false, message: err.response?.data?.detail || "Không nhận diện được" });
+      const msg = err.response?.data?.detail || "Không nhận diện được";
+      setResult({ success: false, message: msg });
+      // Nếu lỗi 404 (không nhận diện) → dừng 3 giây rồi mới cho scan lại
+      if (err.response?.status === 404) {
+        setAutoScan(false);
+        setTimeout(() => setAutoScan(true), 3000);
+      }
     } finally {
       setScanning(false);
     }
@@ -166,6 +176,16 @@ export default function Realtime() {
         <div style={S.wsChip}>
           <span style={{ ...S.wsDot, background: wsStatus === "connected" ? "#00ff88" : "#ff5c5c" }} />
           <span>{wsStatus === "connected" ? "Trực tuyến" : "Đang kết nối..."}</span>
+        </div>
+
+        {/* Điều hướng */}
+        <div style={{ display: "flex", gap: "8px" }}>
+          <a href="/employee-login" style={S.navBtn}>
+            👤 Đăng ký mặt
+          </a>
+          <a href="/login" style={{ ...S.navBtn, background: "rgba(255,255,255,0.06)", borderColor: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.6)" }}>
+            🔐 Quản trị
+          </a>
         </div>
       </div>
 
@@ -360,6 +380,13 @@ const S = {
   clock: { textAlign: "center" },
   clockTime: { color: "#fff", fontWeight: 700, fontSize: "28px", letterSpacing: "2px", fontVariantNumeric: "tabular-nums" },
   clockDate: { color: "rgba(255,255,255,0.4)", fontSize: "13px", textTransform: "capitalize" },
+  navBtn: {
+    background: "rgba(0,229,255,0.1)", border: "1px solid rgba(0,229,255,0.25)",
+    color: "#00e5ff", borderRadius: "8px", padding: "7px 14px", fontSize: "13px",
+    fontWeight: 600, textDecoration: "none", fontFamily: "inherit",
+    display: "flex", alignItems: "center", gap: "6px",
+    transition: "background 0.2s",
+  },
   wsChip: { display: "flex", alignItems: "center", gap: "6px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "20px", padding: "6px 14px", color: "rgba(255,255,255,0.5)", fontSize: "12px" },
   wsDot: { width: "7px", height: "7px", borderRadius: "50%", flexShrink: 0 },
   // Body
