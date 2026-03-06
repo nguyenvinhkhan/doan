@@ -7,7 +7,7 @@ from datetime import datetime, date, timezone, timedelta
 VN_TZ = timezone(timedelta(hours=7))  # UTC+7
 from database import get_db
 from schemas import AttendanceOut, FaceCheckIn
-from auth import get_current_user
+from auth import get_current_user, require_admin
 from ai.detector import compare_faces
 from routes.config_route import get_config
 import models
@@ -172,3 +172,20 @@ def daily_stats(
         .all()
     )
     return [{"date": r.date, "count": r.count} for r in reversed(rows)]
+
+
+@router.delete("/{attendance_id}")
+def delete_attendance(
+    attendance_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_admin),
+):
+    """Xóa bản ghi điểm danh (chỉ admin)."""
+    record = db.query(models.Attendance).filter(
+        models.Attendance.id == attendance_id
+    ).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Không tìm thấy bản ghi")
+    db.delete(record)
+    db.commit()
+    return {"message": f"Đã xóa bản ghi #{attendance_id}"}

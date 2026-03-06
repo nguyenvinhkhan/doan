@@ -125,6 +125,16 @@ export default function Admin() {
     finally { setChangingPw(false); }
   };
 
+  const handleDeleteRecord = async (id) => {
+    if (!window.confirm("Xóa bản ghi điểm danh này?")) return;
+    try {
+      await api.delete(`/attendance/${id}`);
+      setRecords(prev => prev.filter(r => r.id !== id));
+    } catch (err) {
+      alert("❌ " + (err.response?.data?.detail || "Xóa thất bại!"));
+    }
+  };
+
   const handleAcctModal = async () => {
     if (!acctModal) return;
     try {
@@ -180,15 +190,15 @@ export default function Admin() {
             <table style={styles.table}>
               <thead>
                 <tr>
-                  {["#", "Nhân viên", "Mã NV", "Phòng ban", "Giờ vào", "Giờ ra", "Trạng thái", "Độ chính xác"].map(h => (
+                  {["#", "Nhân viên", "Mã NV", "Phòng ban", "Giờ vào", "Giờ ra", "Trạng thái", "Độ chính xác", ""].map(h => (
                     <th key={h} style={styles.th}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {loading && <tr><td colSpan={8} style={styles.tdCenter}>Đang tải...</td></tr>}
+                {loading && <tr><td colSpan={9} style={styles.tdCenter}>Đang tải...</td></tr>}
                 {!loading && records.length === 0 && (
-                  <tr><td colSpan={8} style={styles.tdCenter}>Không có dữ liệu ngày {dateFilter}</td></tr>
+                  <tr><td colSpan={9} style={styles.tdCenter}>Không có dữ liệu ngày {dateFilter}</td></tr>
                 )}
                 {records.map((r, i) => (
                   <tr key={r.id} style={styles.tr}>
@@ -202,6 +212,11 @@ export default function Admin() {
                       <span style={{ ...styles.badge, ...badgeColor(r.status) }}>{r.status}</span>
                     </td>
                     <td style={styles.td}>{r.confidence ? (r.confidence * 100).toFixed(1) + "%" : "—"}</td>
+                    <td style={styles.td}>
+                      <button onClick={() => handleDeleteRecord(r.id)}
+                        style={{ background:"rgba(255,92,92,0.1)", border:"1px solid rgba(255,92,92,0.3)", borderRadius:"6px", padding:"4px 10px", cursor:"pointer", color:"#ff5c5c", fontSize:"13px" }}
+                        title="Xóa bản ghi">🗑</button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
