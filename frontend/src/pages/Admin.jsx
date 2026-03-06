@@ -240,15 +240,16 @@ export default function Admin() {
             </div>
 
             <div style={styles.configGrid}>
-              {timeConfigs.map(c => (
-                <ConfigField
-                  key={c.key}
-                  config={c}
-                  onChange={handleConfigChange}
-                  onSave={handleSaveConfig}
-                  saving={saving}
-                />
-              ))}
+              {/* Giờ bắt đầu & Giờ kết thúc làm việc */}
+              {["work_start", "work_end"].map(key => {
+                const c = timeConfigs.find(x => x.key === key);
+                return c ? <ConfigField key={c.key} config={c} onChange={handleConfigChange} onSave={handleSaveConfig} saving={saving} /> : null;
+              })}
+              {/* Mốc đi trễ: Giờ trễ + Phút trễ cạnh nhau */}
+              {["late_hour", "late_minute"].map(key => {
+                const c = timeConfigs.find(x => x.key === key);
+                return c ? <ConfigField key={c.key} config={c} onChange={handleConfigChange} onSave={handleSaveConfig} saving={saving} /> : null;
+              })}
             </div>
 
             {/* Preview giờ trễ */}

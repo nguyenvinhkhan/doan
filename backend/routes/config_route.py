@@ -9,24 +9,24 @@ router = APIRouter()
 # Cấu hình mặc định
 DEFAULT_CONFIGS = [
     {
-        "key": "late_hour",
-        "value": "8",
-        "label": "Giờ đi trễ (giờ)",
-    },
-    {
-        "key": "late_minute",
-        "value": "30",
-        "label": "Phút đi trễ (phút)",
-    },
-    {
         "key": "work_start",
-        "value": "07:00",
+        "value": "07:30",
         "label": "Giờ bắt đầu làm việc",
     },
     {
         "key": "work_end",
-        "value": "17:00",
+        "value": "17:30",
         "label": "Giờ kết thúc làm việc",
+    },
+    {
+        "key": "late_hour",
+        "value": "7",
+        "label": "Mốc đi trễ — Giờ (0-23)",
+    },
+    {
+        "key": "late_minute",
+        "value": "35",
+        "label": "Mốc đi trễ — Phút (0-59)",
     },
     {
         "key": "face_threshold",
