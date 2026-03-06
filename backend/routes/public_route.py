@@ -4,7 +4,9 @@ Dùng cho trang điểm danh realtime (màn hình kiosk/tablet).
 """
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from datetime import datetime, date
+from datetime import datetime, date, timezone, timedelta
+
+VN_TZ = timezone(timedelta(hours=7))  # UTC+7 Việt Nam
 from database import get_db
 from ai.detector import compare_faces
 from routes.config_route import get_config
@@ -21,7 +23,7 @@ def public_face_checkin(
 ):
     """Điểm danh công khai — không cần token."""
     today = date.today().isoformat()
-    now   = datetime.now()
+    now   = datetime.now(VN_TZ)
 
     employees = db.query(models.Employee).filter(
         models.Employee.is_active == True,
