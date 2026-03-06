@@ -7,7 +7,6 @@ import Realtime from "./pages/Realtime";
 import Employees from "./pages/Employees";
 import RegisterFace from "./pages/RegisterFace";
 import Admin from "./pages/Admin";
-import EmployeeFaceRegister from "./pages/EmployeeFaceRegister";
 import EmployeeLogin from "./pages/EmployeeLogin";
 import RegisterFacePage from "./pages/RegisterFacePage";
 
