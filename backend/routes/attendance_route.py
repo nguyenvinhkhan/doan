@@ -2,7 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List, Optional
-from datetime import datetime, date
+from datetime import datetime, date, timezone, timedelta
+
+VN_TZ = timezone(timedelta(hours=7))  # UTC+7
 from database import get_db
 from schemas import AttendanceOut, FaceCheckIn
 from auth import get_current_user
@@ -19,8 +21,8 @@ def face_checkin(
     db: Session = Depends(get_db),
     _=Depends(get_current_user),
 ):
-    today = date.today().isoformat()
-    now   = datetime.now()
+    now   = datetime.now(VN_TZ)
+    today = now.date().isoformat()
 
     employees = db.query(models.Employee).filter(
         models.Employee.is_active == True,
@@ -120,7 +122,8 @@ def attendance_summary(
     db: Session = Depends(get_db),
     _=Depends(get_current_user),
 ):
-    today = date.today()
+    now   = datetime.now(VN_TZ)
+    today = now.date()
     m = month or today.month
     y = year or today.year
     prefix = f"{y}-{m:02d}"

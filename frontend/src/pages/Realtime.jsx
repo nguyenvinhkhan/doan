@@ -15,6 +15,7 @@ function getStreamUrl(url) {
 
 export default function Realtime() {
   const videoRef    = useRef(null);
+  const imgRef      = useRef(null);  // dùng cho IP camera (MJPEG)
   const canvasRef   = useRef(null);
   const wsRef       = useRef(null);
   const pingRef     = useRef(null);
@@ -22,7 +23,8 @@ export default function Realtime() {
   const autoRef     = useRef(false);
 
   const [camMode, setCamMode]       = useState("webcam"); // "webcam" | "ip"
-  const [ipUrl, setIpUrl]           = useState("http://192.168.1.100:8080/video");
+  const [ipUrl, setIpUrl]           = useState("http://192.168.1.3:4747/mjpegfeed");
+  const [isIPMode, setIsIPMode]     = useState(false);
   const [stream, setStream]         = useState(false);
   const [wsStatus, setWsStatus]     = useState("disconnected");
   const [scanning, setScanning]     = useState(false);
@@ -84,14 +86,20 @@ export default function Realtime() {
   const startIPCamera = () => {
     if (!ipUrl) return;
     stopCamera();
-    videoRef.current.srcObject = null;
-    videoRef.current.src = getStreamUrl(ipUrl);
-    videoRef.current.play().catch(() => {});
+    setIsIPMode(true);
     setStream(true);
     setShowIpForm(false);
+    // Dùng img tag cho MJPEG (tương thích hơn video tag)
+    setTimeout(() => {
+      if (imgRef.current) {
+        imgRef.current.src = getStreamUrl(ipUrl) + "?t=" + Date.now();
+      }
+    }, 100);
   };
 
   const stopCamera = () => {
+    setIsIPMode(false);
+    if (imgRef.current) imgRef.current.src = "";
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(t => t.stop());
       streamRef.current = null;
@@ -208,11 +216,19 @@ export default function Realtime() {
 
           {/* Video */}
           <div style={S.videoBox}>
+            {/* Webcam */}
             <video
               ref={videoRef}
               autoPlay muted playsInline
               crossOrigin="anonymous"
-              style={{ ...S.video, display: stream ? "block" : "none" }}
+              style={{ ...S.video, display: (stream && !isIPMode) ? "block" : "none" }}
+            />
+            {/* IP Camera — dùng img tag để hiển thị MJPEG */}
+            <img
+              ref={imgRef}
+              alt="IP Camera"
+              crossOrigin="anonymous"
+              style={{ ...S.video, display: (stream && isIPMode) ? "block" : "none", objectFit: "cover" }}
             />
             {!stream && (
               <div style={S.videoPlaceholder}>
