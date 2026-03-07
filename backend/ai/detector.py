@@ -3,6 +3,7 @@ Face detection & recognition module.
 Sử dụng OpenCV (không cần dlib/CMake):
   - Phát hiện mặt: Haar Cascade với nhiều mức scaleFactor
   - Nhận diện mặt: LBP histogram + cosine similarity
+  - Hỗ trợ nhiều encoding: lưu list of encodings, so sánh lấy best match
 """
 import base64
 import json
@@ -12,14 +13,12 @@ from PIL import Image
 from typing import Optional, Tuple
 import cv2
 
-# Tải các cascade model
 _CASCADE_FRONTAL = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
 _CASCADE_ALT     = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_alt2.xml")
 _CASCADE_PROFILE = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_profileface.xml")
 
 
 def _base64_to_bgr(image_base64: str) -> np.ndarray:
-    """Chuyển base64 → numpy array BGR."""
     if "," in image_base64:
         image_base64 = image_base64.split(",")[1]
     img_bytes = base64.b64decode(image_base64)
@@ -29,11 +28,6 @@ def _base64_to_bgr(image_base64: str) -> np.ndarray:
 
 
 def _detect_faces(gray: np.ndarray):
-    """
-    Thử nhiều cascade và nhiều thông số để tăng khả năng phát hiện mặt.
-    Trả về list (x, y, w, h) hoặc list rỗng.
-    """
-    # Thử cascade 1 - mặc định, nhiều mức độ
     for scale in [1.05, 1.1, 1.15, 1.2]:
         for neighbors in [3, 4, 5]:
             faces = _CASCADE_FRONTAL.detectMultiScale(
@@ -42,53 +36,34 @@ def _detect_faces(gray: np.ndarray):
             )
             if len(faces) > 0:
                 return faces
-
-    # Thử cascade alt2
-    faces = _CASCADE_ALT.detectMultiScale(
-        gray, scaleFactor=1.1, minNeighbors=3, minSize=(40, 40)
-    )
+    faces = _CASCADE_ALT.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=3, minSize=(40, 40))
     if len(faces) > 0:
         return faces
-
-    # Thử cascade profile (mặt nghiêng)
-    faces = _CASCADE_PROFILE.detectMultiScale(
-        gray, scaleFactor=1.1, minNeighbors=3, minSize=(40, 40)
-    )
+    faces = _CASCADE_PROFILE.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=3, minSize=(40, 40))
     if len(faces) > 0:
         return faces
-
     return []
 
 
 def _preprocess_gray(bgr: np.ndarray) -> np.ndarray:
-    """Tiền xử lý ảnh để tăng độ tương phản."""
     gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
-    # CLAHE tốt hơn equalizeHist
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
     gray = clahe.apply(gray)
-    # Giảm nhiễu nhẹ
     gray = cv2.GaussianBlur(gray, (3, 3), 0)
     return gray
 
 
 def _extract_lbph_histogram(gray: np.ndarray, face_rect) -> np.ndarray:
-    """
-    Cắt vùng mặt → resize 100x100 → tính LBP histogram.
-    Vector đặc trưng kích thước 5x5x256 = 6400 chiều.
-    """
     x, y, w, h = face_rect
-    # Mở rộng vùng mặt thêm 10% để bắt đủ đặc trưng
     pad_x = int(w * 0.1)
     pad_y = int(h * 0.1)
     x1 = max(0, x - pad_x)
     y1 = max(0, y - pad_y)
     x2 = min(gray.shape[1], x + w + pad_x)
     y2 = min(gray.shape[0], y + h + pad_y)
-
     face_roi = gray[y1:y2, x1:x2]
     face_roi = cv2.resize(face_roi, (100, 100))
 
-    # Tính LBP
     lbp_image = np.zeros_like(face_roi)
     for i in range(1, face_roi.shape[0] - 1):
         for j in range(1, face_roi.shape[1] - 1):
@@ -105,7 +80,6 @@ def _extract_lbph_histogram(gray: np.ndarray, face_rect) -> np.ndarray:
             )
             lbp_image[i, j] = binary
 
-    # Chia grid 5x5, histogram mỗi ô
     grid = 5
     h_cell = lbp_image.shape[0] // grid
     w_cell = lbp_image.shape[1] // grid
@@ -116,12 +90,10 @@ def _extract_lbph_histogram(gray: np.ndarray, face_rect) -> np.ndarray:
             hist = cv2.calcHist([cell], [0], None, [256], [0, 256])
             hist = cv2.normalize(hist, hist).flatten()
             hist_full.extend(hist.tolist())
-
     return np.array(hist_full, dtype=np.float32)
 
 
 def _cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
-    """Tính độ tương đồng cosine (0.0 → 1.0)."""
     norm_a = np.linalg.norm(a)
     norm_b = np.linalg.norm(b)
     if norm_a == 0 or norm_b == 0:
@@ -132,29 +104,21 @@ def _cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
 # ── Public API ────────────────────────────────────────────────────────────────
 
 def get_face_encoding(image_base64: str) -> Optional[list]:
-    """
-    Phát hiện khuôn mặt và trích xuất vector đặc trưng.
-    Trả về list float hoặc None nếu không tìm thấy mặt.
-    """
+    """Trích xuất 1 encoding từ 1 ảnh. Trả về list float hoặc None."""
     bgr  = _base64_to_bgr(image_base64)
-
-    # Thử ảnh gốc trước
-    gray  = _preprocess_gray(bgr)
+    gray = _preprocess_gray(bgr)
     faces = _detect_faces(gray)
 
-    # Nếu không tìm thấy, thử ảnh lật ngang (selfie camera thường bị lật)
     if len(faces) == 0:
         flipped = cv2.flip(bgr, 1)
         gray    = _preprocess_gray(flipped)
         faces   = _detect_faces(gray)
 
-    # Nếu vẫn không thấy, thử resize nhỏ hơn
     if len(faces) == 0:
         small = cv2.resize(bgr, (320, 240))
         gray  = _preprocess_gray(small)
         faces = _detect_faces(gray)
         if len(faces) > 0:
-            # Scale tọa độ về ảnh gốc
             scale_x = bgr.shape[1] / 320
             scale_y = bgr.shape[0] / 240
             faces = [(int(x*scale_x), int(y*scale_y), int(w*scale_x), int(h*scale_y)) for x, y, w, h in faces]
@@ -168,30 +132,57 @@ def get_face_encoding(image_base64: str) -> Optional[list]:
     return histogram.tolist()
 
 
+def get_face_encodings_multi(images_base64: list) -> Optional[list]:
+    """
+    Trích xuất encoding từ nhiều ảnh.
+    Trả về list of encodings (mỗi encoding là list float).
+    Bỏ qua ảnh không phát hiện được mặt.
+    Trả về None nếu không ảnh nào có mặt.
+    """
+    encodings = []
+    for img_b64 in images_base64:
+        enc = get_face_encoding(img_b64)
+        if enc is not None:
+            encodings.append(enc)
+    return encodings if encodings else None
+
+
 def compare_faces(
     known_encoding_json: str,
     unknown_image_base64: str,
     threshold: float = 0.72,
 ) -> Tuple[bool, float]:
     """
-    So sánh encoding đã lưu (JSON string) với ảnh mới.
-    Trả về (is_match: bool, confidence: float 0-1).
+    So sánh encoding đã lưu với ảnh mới.
+    Hỗ trợ cả 2 định dạng lưu:
+      - Cũ: JSON của 1 list float  → [[0.1, 0.2, ...]]  hoặc [0.1, 0.2, ...]
+      - Mới: JSON của list of lists → [[enc1], [enc2], ...]
+    Lấy điểm similarity cao nhất trong tất cả encoding đã lưu.
     """
-    known_vec = np.array(json.loads(known_encoding_json), dtype=np.float32)
-
     unknown_encoding = get_face_encoding(unknown_image_base64)
     if unknown_encoding is None:
         return False, 0.0
 
     unknown_vec = np.array(unknown_encoding, dtype=np.float32)
-    similarity  = _cosine_similarity(known_vec, unknown_vec)
-    is_match    = similarity >= threshold
 
-    return is_match, round(similarity, 4)
+    stored = json.loads(known_encoding_json)
+
+    # Phân biệt định dạng cũ (1D list) và mới (list of lists)
+    if isinstance(stored[0], list):
+        # Định dạng mới: nhiều encoding
+        known_vecs = [np.array(enc, dtype=np.float32) for enc in stored]
+    else:
+        # Định dạng cũ: 1 encoding duy nhất
+        known_vecs = [np.array(stored, dtype=np.float32)]
+
+    # Lấy similarity cao nhất
+    best_similarity = max(_cosine_similarity(kv, unknown_vec) for kv in known_vecs)
+    is_match = best_similarity >= threshold
+
+    return is_match, round(best_similarity, 4)
 
 
 def detect_faces_in_image(image_base64: str) -> int:
-    """Đếm số khuôn mặt trong ảnh."""
     bgr   = _base64_to_bgr(image_base64)
     gray  = _preprocess_gray(bgr)
     faces = _detect_faces(gray)

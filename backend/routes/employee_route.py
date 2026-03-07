@@ -5,7 +5,7 @@ from typing import List, Optional
 from database import get_db
 from schemas import EmployeeCreate, EmployeeUpdate, EmployeeOut
 from auth import get_current_user, require_admin, hash_password
-from ai.detector import get_face_encoding
+from ai.detector import get_face_encoding, get_face_encodings_multi
 import models
 import json
 
@@ -172,17 +172,28 @@ def register_face(
     if not emp:
         raise HTTPException(status_code=404, detail="Không tìm thấy nhân viên")
 
-    image_base64 = payload.get("image_base64")
-    if not image_base64:
+    # Hỗ trợ cả 1 ảnh (image_base64) lẫn nhiều ảnh (images_base64)
+    images = payload.get("images_base64") or []
+    single = payload.get("image_base64")
+    if single and single not in images:
+        images.insert(0, single)
+
+    if not images:
         raise HTTPException(status_code=400, detail="Thiếu ảnh khuôn mặt")
 
-    encoding = get_face_encoding(image_base64)
-    if encoding is None:
-        raise HTTPException(status_code=422, detail="Không phát hiện khuôn mặt trong ảnh")
+    encodings = get_face_encodings_multi(images)
+    if not encodings:
+        raise HTTPException(status_code=422, detail="Không phát hiện khuôn mặt trong ảnh nào")
 
-    emp.face_encoding = json.dumps(encoding)
+    # Lưu list of encodings (định dạng mới, tương thích ngược)
+    emp.face_encoding = json.dumps(encodings)
     db.add(emp)
     db.commit()
     db.refresh(emp)
-    print(f"[OK] Đã lưu face_encoding cho {emp.full_name}, size={len(emp.face_encoding)}")
-    return {"message": "Đăng ký khuôn mặt thành công", "employee_id": employee_id, "encoding_size": len(encoding)}
+    print(f"[OK] Đã lưu {len(encodings)} encoding cho {emp.full_name}")
+    return {
+        "message": "Đăng ký khuôn mặt thành công",
+        "employee_id": employee_id,
+        "encodings_count": len(encodings),
+        "total_images": len(images),
+    }

@@ -93,16 +93,15 @@ export default function RegisterFacePage() {
     setSaving(true);
     setStatus({ type: "info", msg: "⏳ Đang xử lý và lưu khuôn mặt..." });
     try {
-      // Dùng ảnh đầu tiên làm encoding chính (có thể nâng cấp dùng trung bình)
-      const image_base64 = photos[0];
       await axios.post(
         `${API}/api/employees/${employee.id}/register-face`,
-        { image_base64 },
+        { images_base64: photos },
         { headers: authHeader }
       );
       setDone(true);
       stopCamera();
-      setStatus({ type: "success", msg: "🎉 Đăng ký khuôn mặt thành công! Bạn có thể chấm công bằng khuôn mặt từ bây giờ." });
+      setStatus({ type: "success", msg: "🎉 Đăng ký thành công! Đang chuyển về trang chấm công..." });
+      setTimeout(() => navigate("/checkin"), 3000);
     } catch (err) {
       setStatus({ type: "error", msg: "❌ " + (err.response?.data?.detail || "Lưu thất bại. Thử chụp lại ảnh rõ hơn.") });
     } finally {
@@ -149,7 +148,7 @@ export default function RegisterFacePage() {
             <div style={{ color: "rgba(255,255,255,0.6)", fontSize: "15px", marginBottom: "24px" }}>
               Khuôn mặt của bạn đã được lưu. Bạn có thể chấm công bằng khuôn mặt từ bây giờ.
             </div>
-            <button onClick={logout} style={S.btnPrimary}>Hoàn tất & Thoát</button>
+            <button onClick={() => navigate("/checkin")} style={S.btnPrimary}>✅ Về trang chấm công</button>
           </div>
         )}
 
