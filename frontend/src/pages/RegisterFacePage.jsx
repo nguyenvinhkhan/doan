@@ -17,6 +17,10 @@ export default function RegisterFacePage() {
   const [status,   setStatus]   = useState(null);
   const [saving,   setSaving]   = useState(false);
   const [done,     setDone]     = useState(false);
+  const [showPwd,  setShowPwd]  = useState(false);
+  const [pwdForm,  setPwdForm]  = useState({ current: "", next: "", confirm: "" });
+  const [pwdStatus, setPwdStatus] = useState(null);
+  const [pwdSaving, setPwdSaving] = useState(false);
 
   const token = localStorage.getItem("employee_token");
   const authHeader = { Authorization: `Bearer ${token}` };
@@ -60,6 +64,22 @@ export default function RegisterFacePage() {
     setStream(false);
   };
 
+  // Tự tắt camera khi đủ 5 ảnh
+  useEffect(() => {
+    if (photos.length >= 5 && stream) {
+      stopCamera();
+      setStatus({ type: "success", msg: "✅ Đã chụp đủ 5 ảnh! Nhấn Lưu khuôn mặt để hoàn tất." });
+    }
+  }, [photos.length]);
+
+  // Tự tắt camera khi đủ 5 ảnh
+  useEffect(() => {
+    if (photos.length >= 5 && stream) {
+      stopCamera();
+      setStatus({ type: "success", msg: "✅ Đã chụp đủ 5 ảnh! Nhấn Lưu khuôn mặt để hoàn tất." });
+    }
+  }, [photos.length]);
+
   // Chụp ảnh
   const capture = useCallback(() => {
     if (!videoRef.current || capturing) return;
@@ -73,8 +93,13 @@ export default function RegisterFacePage() {
     canvas.height = videoRef.current.videoHeight || 480;
     canvas.getContext("2d").drawImage(videoRef.current, 0, 0);
     const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
-    setPhotos(prev => [...prev, dataUrl]);
-    setStatus({ type: "success", msg: `✅ Đã chụp ảnh ${photos.length + 1}/5. ${photos.length < 4 ? "Hãy thay đổi góc mặt nhẹ rồi chụp tiếp." : "Đã đủ! Nhấn Lưu khuôn mặt."}` });
+    setPhotos(prev => {
+      const next = [...prev, dataUrl];
+      if (next.length < 5) {
+        setStatus({ type: "success", msg: `✅ Đã chụp ${next.length}/5 ảnh. Thay đổi góc mặt nhẹ rồi chụp tiếp.` });
+      }
+      return next;
+    });
     setTimeout(() => setCapturing(false), 500);
   }, [photos, capturing]);
 
@@ -109,6 +134,27 @@ export default function RegisterFacePage() {
     }
   };
 
+  const changePassword = async () => {
+    if (!pwdForm.current) { setPwdStatus({ type: "error", msg: "Nhập mật khẩu hiện tại" }); return; }
+    if (pwdForm.next.length < 6) { setPwdStatus({ type: "error", msg: "Mật khẩu mới phải ít nhất 6 ký tự" }); return; }
+    if (pwdForm.next !== pwdForm.confirm) { setPwdStatus({ type: "error", msg: "Xác nhận mật khẩu không khớp" }); return; }
+    setPwdSaving(true);
+    setPwdStatus(null);
+    try {
+      await axios.post(`${API}/api/auth/change-password`,
+        { current_password: pwdForm.current, new_password: pwdForm.next },
+        { headers: authHeader }
+      );
+      setPwdStatus({ type: "success", msg: "✅ Đổi mật khẩu thành công!" });
+      setPwdForm({ current: "", next: "", confirm: "" });
+      setTimeout(() => setShowPwd(false), 1500);
+    } catch (err) {
+      setPwdStatus({ type: "error", msg: "❌ " + (err.response?.data?.detail || "Đổi mật khẩu thất bại") });
+    } finally {
+      setPwdSaving(false);
+    }
+  };
+
   const logout = () => {
     localStorage.removeItem("employee_token");
     localStorage.removeItem("employee_user");
@@ -134,7 +180,10 @@ export default function RegisterFacePage() {
             )}
           </div>
         </div>
-        <button onClick={logout} style={S.btnLogout}>Đăng xuất</button>
+        <div style={{ display: "flex", gap: "8px" }}>
+          <button onClick={() => { setShowPwd(p => !p); setPwdStatus(null); }} style={S.btnChangePwd}>🔑 Đổi mật khẩu</button>
+          <button onClick={logout} style={S.btnLogout}>Đăng xuất</button>
+        </div>
       </div>
 
       <div style={S.body}>
@@ -249,7 +298,53 @@ export default function RegisterFacePage() {
               </div>
             )}
 
-            {/* Trạng thái hiện tại */}
+            {/* Modal đổi mật khẩu */}
+      {showPwd && (
+        <div style={S.pwdModal}>
+          <div style={S.pwdCard}>
+            <div style={S.pwdTitle}>🔑 Đổi mật khẩu</div>
+
+            {["current","next","confirm"].map((key, i) => (
+              <div key={key} style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <label style={S.pwdLabel}>
+                  {key === "current" ? "Mật khẩu hiện tại" : key === "next" ? "Mật khẩu mới" : "Xác nhận mật khẩu mới"}
+                </label>
+                <input
+                  type="password"
+                  value={pwdForm[key]}
+                  onChange={e => setPwdForm(p => ({ ...p, [key]: e.target.value }))}
+                  placeholder={key === "current" ? "Nhập mật khẩu hiện tại" : key === "next" ? "Ít nhất 6 ký tự" : "Nhập lại mật khẩu mới"}
+                  style={S.pwdInput}
+                  onKeyDown={e => e.key === "Enter" && changePassword()}
+                />
+              </div>
+            ))}
+
+            {pwdStatus && (
+              <div style={{
+                padding: "10px 14px", borderRadius: "8px", fontSize: "13px", fontWeight: 600,
+                color: pwdStatus.type === "success" ? "#00ff88" : "#ff5c5c",
+                background: pwdStatus.type === "success" ? "rgba(0,255,136,0.08)" : "rgba(255,92,92,0.08)",
+                border: `1px solid ${pwdStatus.type === "success" ? "rgba(0,255,136,0.3)" : "rgba(255,92,92,0.3)"}`,
+              }}>
+                {pwdStatus.msg}
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button onClick={changePassword} disabled={pwdSaving} style={{ ...S.btnPrimary, flex: 1 }}>
+                {pwdSaving ? "⏳ Đang lưu..." : "💾 Xác nhận"}
+              </button>
+              <button onClick={() => { setShowPwd(false); setPwdStatus(null); setPwdForm({ current: "", next: "", confirm: "" }); }}
+                style={S.btnSecondary}>
+                Hủy
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Trạng thái hiện tại */}
             {employee && (
               <div style={S.currentStatus}>
                 <span style={{ color: "rgba(255,255,255,0.4)", fontSize: "13px" }}>
@@ -372,6 +467,30 @@ const S = {
   successBox: {
     display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
     minHeight: "400px", textAlign: "center",
+  },
+  btnChangePwd: {
+    background: "rgba(255,214,0,0.1)", border: "1px solid rgba(255,214,0,0.3)",
+    color: "#ffd600", borderRadius: "8px", padding: "7px 14px", cursor: "pointer",
+    fontSize: "13px", fontFamily: "inherit", fontWeight: 600,
+  },
+  pwdModal: {
+    position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)",
+    display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000,
+    padding: "20px",
+  },
+  pwdCard: {
+    background: "#0d1628", border: "1px solid rgba(255,255,255,0.1)",
+    borderRadius: "16px", padding: "28px 24px",
+    width: "100%", maxWidth: "400px",
+    display: "flex", flexDirection: "column", gap: "16px",
+    boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
+  },
+  pwdTitle: { color: "#fff", fontWeight: 700, fontSize: "18px" },
+  pwdLabel: { color: "rgba(255,255,255,0.5)", fontSize: "12px", fontWeight: 600 },
+  pwdInput: {
+    background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)",
+    borderRadius: "8px", padding: "11px 14px", color: "#fff",
+    fontSize: "14px", fontFamily: "inherit",
   },
   currentStatus: {
     display: "flex", alignItems: "center", gap: "8px", justifyContent: "center",
