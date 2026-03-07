@@ -61,9 +61,17 @@ class EmployeeOut(BaseModel):
     avatar_url: Optional[str]
     is_active: bool
     created_at: datetime
-    has_face: Optional[bool] = False       # True nếu đã đăng ký khuôn mặt
+    face_encoding: Optional[str] = None   # dùng để check has_face ở frontend
+    has_face: Optional[bool] = False      # True nếu đã đăng ký khuôn mặt
+
     class Config:
         from_attributes = True
+
+    def model_post_init(self, __context):
+        # Tự động tính has_face từ face_encoding
+        object.__setattr__(self, "has_face", self.face_encoding is not None)
+        # Ẩn face_encoding khỏi response (không trả về raw data)
+        object.__setattr__(self, "face_encoding", None)
 
 
 # ─── Attendance ───────────────────────────────────────────────────────────────

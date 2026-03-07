@@ -80,7 +80,7 @@ export default function EmployeeLogin() {
         </div>
 
         <div style={S.divider} />
-        <a href="/login" style={S.link}>← Trang đăng nhập quản trị</a>
+        <a href="/checkin" style={S.link}>← Về trang chấm công</a>
       </div>
 
       <style>{`

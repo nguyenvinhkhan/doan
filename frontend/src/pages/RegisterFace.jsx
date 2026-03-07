@@ -6,17 +6,24 @@ export default function RegisterFace() {
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
 
-  const [employees,   setEmployees]   = useState([]);
-  const [selected,    setSelected]    = useState("");
-  const [stream,      setStream]      = useState(false);
-  const [capturing,   setCapturing]   = useState(false);
-  const [photos,      setPhotos]      = useState([]);   // tối đa 5 ảnh
-  const [status,      setStatus]      = useState(null);
-  const [saving,      setSaving]      = useState(false);
+  const [employees, setEmployees] = useState([]);
+  const [selected,  setSelected]  = useState("");
+  const [stream,    setStream]    = useState(false);
+  const [photos,    setPhotos]    = useState([]);
+  const [status,    setStatus]    = useState(null);
+  const [saving,    setSaving]    = useState(false);
 
   useEffect(() => {
     api.get("/employees/?is_active=true&limit=200").then(r => setEmployees(r.data));
   }, []);
+
+  // Tự tắt camera khi đủ 5 ảnh
+  useEffect(() => {
+    if (photos.length >= 5) {
+      stopCamera();
+      setStatus({ type: "success", msg: "✅ Đã chụp đủ 5 ảnh! Nhấn Lưu Khuôn Mặt để hoàn tất." });
+    }
+  }, [photos.length]);
 
   const startCamera = async () => {
     try {
@@ -39,12 +46,8 @@ export default function RegisterFace() {
   };
 
   const capture = useCallback(() => {
-    if (!videoRef.current || capturing) return;
-    if (photos.length >= 5) {
-      setStatus({ type: "warn", msg: "⚠️ Đã đủ 5 ảnh. Nhấn Lưu khuôn mặt để hoàn tất." });
-      return;
-    }
-    setCapturing(true);
+    if (!videoRef.current || !stream) return;
+    if (photos.length >= 5) return;
     const canvas = canvasRef.current;
     canvas.width  = videoRef.current.videoWidth  || 640;
     canvas.height = videoRef.current.videoHeight || 480;
@@ -52,48 +55,45 @@ export default function RegisterFace() {
     const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
     setPhotos(prev => {
       const next = [...prev, dataUrl];
-      setStatus({ type: "success", msg: `✅ Đã chụp ${next.length}/5 ảnh.${next.length < 5 ? " Thay đổi góc mặt nhẹ rồi chụp tiếp." : " Nhấn Lưu khuôn mặt!"}` });
+      if (next.length < 5) {
+        setStatus({ type: "success", msg: `✅ Đã chụp ${next.length}/5 ảnh. Thay đổi góc mặt nhẹ rồi chụp tiếp.` });
+      }
       return next;
     });
-    setTimeout(() => setCapturing(false), 400);
-  }, [photos, capturing]);
+  }, [stream, photos.length]);
 
   const removePhoto = (idx) => {
     setPhotos(prev => prev.filter((_, i) => i !== idx));
-    setStatus({ type: "info", msg: "Đã xóa ảnh. Chụp lại nếu cần." });
   };
 
-  const handleRegister = async () => {
+  const handleSave = async () => {
     if (!selected) { setStatus({ type: "error", msg: "⚠️ Vui lòng chọn nhân viên trước" }); return; }
     if (photos.length === 0) { setStatus({ type: "error", msg: "⚠️ Vui lòng chụp ít nhất 1 ảnh" }); return; }
-
     setSaving(true);
     setStatus({ type: "info", msg: "⏳ Đang xử lý và lưu khuôn mặt..." });
     try {
-      await api.post(`/employees/${selected}/register-face`, { images_base64: photos });
-      setStatus({ type: "success", msg: "✅ Đăng ký khuôn mặt thành công!" });
+      const res = await api.post(`/employees/${selected}/register-face`, { images_base64: photos });
+      setStatus({ type: "success", msg: `✅ Đăng ký thành công! Đã lưu ${res.data.encodings_count} encoding.` });
       setPhotos([]);
       setSelected("");
-      stopCamera();
-      // Reload danh sách để cập nhật trạng thái
       const r = await api.get("/employees/?is_active=true&limit=200");
       setEmployees(r.data);
     } catch (err) {
       const msg = err.response?.data?.detail || "Đăng ký thất bại";
-      if (msg.includes("khuôn mặt") || msg.includes("face")) {
-        setStatus({ type: "error", msg: "❌ Không phát hiện khuôn mặt! Thử chụp lại với ánh sáng tốt hơn.", tips: true });
-      } else {
-        setStatus({ type: "error", msg: `❌ ${msg}` });
-      }
+      setStatus({
+        type: "error",
+        msg: `❌ ${msg}`,
+        tips: msg.includes("khuôn mặt") || msg.includes("face"),
+      });
     } finally {
       setSaving(false);
     }
   };
 
   const selectedEmp = employees.find(e => String(e.id) === String(selected));
-  const registered  = employees.filter(e => e.face_encoding).length;
+  const registered  = employees.filter(e => e.has_face).length;
 
-  const statusColor = {
+  const C = {
     success: { border: "rgba(0,255,136,0.3)", bg: "rgba(0,255,136,0.08)", text: "#00ff88" },
     error:   { border: "rgba(255,92,92,0.3)",  bg: "rgba(255,92,92,0.08)",  text: "#ff5c5c" },
     warn:    { border: "rgba(255,214,0,0.3)",  bg: "rgba(255,214,0,0.08)",  text: "#ffd600" },
@@ -107,17 +107,18 @@ export default function RegisterFace() {
       <p style={S.sub}>Chụp nhiều góc để tăng độ chính xác nhận diện</p>
 
       <div style={S.layout}>
-        {/* ── Cột trái ── */}
+        {/* Cột trái */}
         <div style={S.leftCol}>
 
-          {/* Bước 1: Chọn nhân viên */}
+          {/* Bước 1 */}
           <div style={S.card}>
             <div style={S.stepHeader}><span style={S.stepNum}>1</span><span style={S.stepTitle}>Chọn nhân viên</span></div>
-            <select style={S.select} value={selected} onChange={e => { setSelected(e.target.value); setPhotos([]); setStatus(null); }}>
+            <select style={S.select} value={selected}
+              onChange={e => { setSelected(e.target.value); setPhotos([]); setStatus(null); }}>
               <option value="">-- Chọn nhân viên --</option>
               {employees.map(e => (
                 <option key={e.id} value={e.id}>
-                  [{e.employee_code}] {e.full_name}{e.face_encoding ? " ✓" : ""}
+                  [{e.employee_code}] {e.full_name}{e.has_face ? " ✓" : ""}
                 </option>
               ))}
             </select>
@@ -129,18 +130,17 @@ export default function RegisterFace() {
                   <div style={{ color: "rgba(255,255,255,0.4)", fontSize: "13px" }}>
                     {selectedEmp.employee_code} • {selectedEmp.department || "Chưa có phòng ban"}
                   </div>
-                  <div style={{ color: selectedEmp.face_encoding ? "#00ff88" : "#ffd600", fontSize: "12px", marginTop: "4px" }}>
-                    {selectedEmp.face_encoding ? "✓ Đã đăng ký — có thể đăng ký lại" : "⚠ Chưa đăng ký khuôn mặt"}
+                  <div style={{ color: selectedEmp.has_face ? "#00ff88" : "#ffd600", fontSize: "12px", marginTop: "4px" }}>
+                    {selectedEmp.has_face ? "✓ Đã đăng ký — có thể đăng ký lại" : "⚠ Chưa đăng ký khuôn mặt"}
                   </div>
                 </div>
               </div>
             )}
           </div>
 
-          {/* Bước 2: Camera */}
+          {/* Bước 2 */}
           <div style={S.card}>
-            <div style={S.stepHeader}><span style={S.stepNum}>2</span><span style={S.stepTitle}>Chụp ảnh khuôn mặt (tối đa 5 ảnh)</span></div>
-
+            <div style={S.stepHeader}><span style={S.stepNum}>2</span><span style={S.stepTitle}>Chụp ảnh ({photos.length}/5)</span></div>
             <div style={S.videoWrap}>
               <video ref={videoRef} autoPlay muted playsInline
                 style={{ width: "100%", height: "100%", objectFit: "cover", display: stream ? "block" : "none" }} />
@@ -150,19 +150,16 @@ export default function RegisterFace() {
                   <div style={{ color: "rgba(255,255,255,0.3)", fontSize: "14px", marginTop: "8px" }}>Camera chưa bật</div>
                 </div>
               )}
-              {stream && (
-                <div style={S.faceGuide}><div style={S.faceCircle} /></div>
-              )}
+              {stream && <div style={S.faceGuide}><div style={S.faceCircle} /></div>}
             </div>
-
             <div style={S.controls}>
               {!stream ? (
-                <button onClick={startCamera} style={S.btnPrimary}>▶ Bật Camera</button>
+                <button onClick={startCamera} style={S.btnStart}>▶ Bật Camera</button>
               ) : (
                 <>
-                  <button onClick={capture} disabled={capturing || photos.length >= 5}
-                    style={{ ...S.btnCapture, flex: 1, opacity: (capturing || photos.length >= 5) ? 0.5 : 1 }}>
-                    {capturing ? "⏳..." : `📸 Chụp (${photos.length}/5)`}
+                  <button onClick={capture} disabled={photos.length >= 5}
+                    style={{ ...S.btnCapture, flex: 1, opacity: photos.length >= 5 ? 0.4 : 1 }}>
+                    📸 Chụp ({photos.length}/5)
                   </button>
                   <button onClick={stopCamera} style={S.btnSecondary}>⏹ Tắt</button>
                 </>
@@ -191,19 +188,14 @@ export default function RegisterFace() {
 
           {/* Thông báo */}
           {status && (
-            <div style={{
-              border: `1px solid ${statusColor[status.type].border}`,
-              background: statusColor[status.type].bg,
-              color: statusColor[status.type].text,
-              borderRadius: "10px", padding: "12px 16px", fontSize: "14px", fontWeight: 600,
-            }}>
+            <div style={{ border: `1px solid ${C[status.type].border}`, background: C[status.type].bg, color: C[status.type].text, borderRadius: "10px", padding: "12px 16px", fontSize: "14px", fontWeight: 600 }}>
               {status.msg}
               {status.tips && (
                 <ul style={{ margin: "8px 0 0", paddingLeft: "18px", fontWeight: 400, fontSize: "13px" }}>
-                  <li>Đảm bảo <strong>ánh sáng đủ sáng</strong>, không ngược sáng</li>
-                  <li>Nhìn <strong>thẳng vào camera</strong></li>
-                  <li>Khuôn mặt chiếm <strong>ít nhất 1/3 khung hình</strong></li>
-                  <li>Không đeo <strong>khẩu trang, kính râm</strong></li>
+                  <li>Ánh sáng đủ sáng, không ngược sáng</li>
+                  <li>Nhìn thẳng vào camera</li>
+                  <li>Khuôn mặt chiếm ít nhất 1/3 khung hình</li>
+                  <li>Không đeo khẩu trang, kính râm</li>
                 </ul>
               )}
             </div>
@@ -211,17 +203,18 @@ export default function RegisterFace() {
 
           {/* Nút lưu */}
           <button
-            onClick={handleRegister}
+            type="button"
+            onClick={handleSave}
             disabled={saving || !selected || photos.length === 0}
-            style={{ ...S.btnSave, opacity: (saving || !selected || photos.length === 0) ? 0.5 : 1 }}
+            style={{ ...S.btnSave, opacity: (saving || !selected || photos.length === 0) ? 0.4 : 1, cursor: (saving || !selected || photos.length === 0) ? "not-allowed" : "pointer" }}
           >
             {saving ? "⏳ Đang xử lý..." : "🪪 Lưu Khuôn Mặt"}
           </button>
+
         </div>
 
-        {/* ── Cột phải ── */}
+        {/* Cột phải */}
         <div style={S.rightCol}>
-          {/* Thống kê */}
           <div style={S.statsBox}>
             <div style={S.statItem}>
               <div style={{ color: "#00e5ff", fontWeight: 700, fontSize: "28px" }}>{employees.length}</div>
@@ -239,13 +232,13 @@ export default function RegisterFace() {
             </div>
           </div>
 
-          {/* Danh sách chưa đăng ký */}
-          {employees.filter(e => !e.face_encoding).length > 0 && (
+          {employees.filter(e => !e.has_face).length > 0 && (
             <div style={S.unregBox}>
               <div style={S.unregTitle}>⚠ Chưa đăng ký khuôn mặt</div>
               <div style={S.unregList}>
-                {employees.filter(e => !e.face_encoding).map(e => (
-                  <div key={e.id} style={S.unregItem} onClick={() => { setSelected(String(e.id)); setPhotos([]); setStatus(null); }}>
+                {employees.filter(e => !e.has_face).map(e => (
+                  <div key={e.id} style={S.unregItem}
+                    onClick={() => { setSelected(String(e.id)); setPhotos([]); setStatus(null); }}>
                     <div style={S.unregAvatar}>{e.full_name[0]}</div>
                     <div>
                       <div style={{ color: "#fff", fontSize: "13px", fontWeight: 600 }}>{e.full_name}</div>
@@ -257,7 +250,6 @@ export default function RegisterFace() {
             </div>
           )}
 
-          {/* Hướng dẫn */}
           <div style={S.guideBox}>
             <div style={S.guideTitle}>📋 Hướng dẫn chụp ảnh</div>
             {[
@@ -282,7 +274,6 @@ export default function RegisterFace() {
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&display=swap');
         select:focus { outline:none; border-color:#00e5ff !important; }
-        button:disabled { cursor:not-allowed; }
       `}</style>
     </div>
   );
@@ -306,7 +297,7 @@ const S = {
   faceGuide:{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" },
   faceCircle:{ width: "160px", height: "200px", border: "2px dashed rgba(0,229,255,0.5)", borderRadius: "50%", boxShadow: "0 0 20px rgba(0,229,255,0.15)" },
   controls: { display: "flex", gap: "10px" },
-  btnPrimary: { background: "#00e5ff", color: "#0a0e1a", border: "none", borderRadius: "8px", padding: "10px 20px", fontWeight: 700, cursor: "pointer", fontSize: "14px", fontFamily: "inherit" },
+  btnStart:   { background: "#00e5ff", color: "#0a0e1a", border: "none", borderRadius: "8px", padding: "10px 20px", fontWeight: 700, cursor: "pointer", fontSize: "14px", fontFamily: "inherit" },
   btnCapture: { background: "#00ff88", color: "#0a0e1a", border: "none", borderRadius: "8px", padding: "10px 20px", fontWeight: 700, cursor: "pointer", fontSize: "14px", fontFamily: "inherit" },
   btnSecondary: { background: "rgba(255,255,255,0.07)", color: "#fff", border: "1px solid rgba(255,255,255,0.12)", borderRadius: "8px", padding: "10px 16px", cursor: "pointer", fontSize: "14px", fontFamily: "inherit" },
   photosGrid: { display: "flex", gap: "10px", flexWrap: "wrap" },
@@ -314,7 +305,7 @@ const S = {
   photoImg:   { width: "100%", height: "100%", objectFit: "cover" },
   photoRemove:{ position: "absolute", top: "4px", right: "4px", background: "rgba(255,92,92,0.85)", color: "#fff", border: "none", borderRadius: "50%", width: "20px", height: "20px", cursor: "pointer", fontSize: "11px", display: "flex", alignItems: "center", justifyContent: "center" },
   photoLabel: { position: "absolute", bottom: 0, left: 0, right: 0, background: "rgba(0,0,0,0.5)", color: "#fff", fontSize: "11px", textAlign: "center", padding: "2px" },
-  btnSave:    { width: "100%", background: "linear-gradient(135deg,#00e5ff,#0066ff)", color: "#fff", border: "none", borderRadius: "10px", padding: "14px", fontWeight: 700, cursor: "pointer", fontSize: "15px", fontFamily: "inherit", transition: "opacity .2s" },
+  btnSave:    { width: "100%", background: "linear-gradient(135deg,#00e5ff,#0066ff)", color: "#fff", border: "none", borderRadius: "10px", padding: "14px", fontWeight: 700, fontSize: "15px", fontFamily: "inherit", transition: "opacity .2s" },
   rightCol:   { display: "flex", flexDirection: "column", gap: "16px" },
   statsBox:   { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "14px", padding: "20px", display: "flex", justifyContent: "space-around", alignItems: "center" },
   statItem:   { textAlign: "center" },
