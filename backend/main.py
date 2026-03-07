@@ -8,9 +8,9 @@ import models  # noqa: F401
 
 def run_migrations():
     """Thêm các cột mới vào bảng đã tồn tại nếu chưa có."""
+    from sqlalchemy import text
     with engine.connect() as conn:
-        # Thêm cột employee_id vào bảng users nếu chưa có
-        conn.execute("""
+        conn.execute(text("""
             DO $$
             BEGIN
                 IF NOT EXISTS (
@@ -20,7 +20,7 @@ def run_migrations():
                     ALTER TABLE users ADD COLUMN employee_id INTEGER REFERENCES employees(id);
                 END IF;
             END$$;
-        """)
+        """))
         conn.commit()
 
 @asynccontextmanager
