@@ -20,6 +20,7 @@ class UserOut(BaseModel):
     email: str
     role: str
     is_active: bool
+    employee_id: Optional[int] = None
     created_at: datetime
     class Config:
         from_attributes = True

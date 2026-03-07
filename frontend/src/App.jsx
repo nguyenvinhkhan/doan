@@ -25,16 +25,8 @@ function PrivateRoute({ children }) {
   const { user, loading } = useAuth();
   if (loading) return null;
   if (!user) return <Navigate to="/login" replace />;
-  // Nhân viên chỉ được vào trang đăng ký mặt
-  if (user.role === "employee") return <Navigate to="/employee-register" replace />;
-  return children;
-}
-
-function EmployeeRoute({ children }) {
-  const { user, loading } = useAuth();
-  if (loading) return null;
-  if (!user) return <Navigate to="/login" replace />;
-  if (user.role !== "employee") return <Navigate to="/dashboard" replace />;
+  // Nhân viên không được vào trang quản trị
+  if (user.role === "employee") return <Navigate to="/employee-login" replace />;
   return children;
 }
 
@@ -49,10 +41,10 @@ export default function App() {
           <Route path="/"        element={<Navigate to="/checkin" replace />} />
 
           {/* Trang nhân viên - đăng nhập riêng bằng localStorage */}
-          <Route path="/employee-login" element={<EmployeeLogin />} />
-          <Route path="/register-face"  element={<RegisterFacePage />} />
+          <Route path="/employee-login"         element={<EmployeeLogin />} />
+          <Route path="/register-face-employee" element={<RegisterFacePage />} />
 
-          {/* Trang quản trị - cần đăng nhập */}
+          {/* Trang quản trị - cần đăng nhập admin/viewer */}
           <Route path="/dashboard"     element={<PrivateRoute><Layout><Dashboard /></Layout></PrivateRoute>} />
           <Route path="/employees"     element={<PrivateRoute><Layout><Employees /></Layout></PrivateRoute>} />
           <Route path="/register-face" element={<PrivateRoute><Layout><RegisterFace /></Layout></PrivateRoute>} />

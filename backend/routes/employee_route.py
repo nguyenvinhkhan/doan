@@ -12,6 +12,37 @@ import json
 router = APIRouter()
 
 
+@router.get("/meta/departments")
+def get_departments(db: Session = Depends(get_db), _=Depends(get_current_user)):
+    rows = db.query(models.Employee.department).distinct().all()
+    return [r[0] for r in rows if r[0]]
+
+
+@router.get("/me/profile")
+def get_my_profile(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Nhân viên xem thông tin của chính mình."""
+    if current_user.role != "employee":
+        raise HTTPException(status_code=403, detail="Chỉ dành cho nhân viên")
+    if not current_user.employee_id:
+        raise HTTPException(status_code=404, detail="Không tìm thấy hồ sơ nhân viên")
+    emp = db.query(models.Employee).filter(
+        models.Employee.id == current_user.employee_id
+    ).first()
+    if not emp:
+        raise HTTPException(status_code=404, detail="Không tìm thấy nhân viên")
+    return {
+        "id": emp.id,
+        "employee_code": emp.employee_code,
+        "full_name": emp.full_name,
+        "department": emp.department,
+        "position": emp.position,
+        "has_face": emp.has_face,
+    }
+
+
 @router.get("/", response_model=List[EmployeeOut])
 def list_employees(
     search: Optional[str] = Query(None),
@@ -129,11 +160,14 @@ def register_face(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """Đăng ký khuôn mặt - Admin đăng ký bất kỳ ai, nhân viên chỉ đăng ký của mình."""
-    # Kiểm tra quyền: admin hoặc chính nhân viên đó
-    if current_user.role not in ("admin",):
-        if current_user.employee_id != employee_id:
-            raise HTTPException(status_code=403, detail="Bạn chỉ có thể đăng ký khuôn mặt của chính mình")
+    """Đăng ký khuôn mặt.
+    - Admin: đăng ký cho bất kỳ nhân viên nào (qua trang /register-face)
+    - Employee: chỉ đăng ký khuôn mặt của chính mình (qua trang /register-face-employee)
+    """
+    if current_user.role == "employee" and current_user.employee_id != employee_id:
+        raise HTTPException(status_code=403, detail="Bạn chỉ có thể đăng ký khuôn mặt của chính mình")
+    if current_user.role == "viewer":
+        raise HTTPException(status_code=403, detail="Viewer không có quyền đăng ký khuôn mặt")
     emp = db.query(models.Employee).filter(models.Employee.id == employee_id).first()
     if not emp:
         raise HTTPException(status_code=404, detail="Không tìm thấy nhân viên")
@@ -152,34 +186,3 @@ def register_face(
     db.refresh(emp)
     print(f"[OK] Đã lưu face_encoding cho {emp.full_name}, size={len(emp.face_encoding)}")
     return {"message": "Đăng ký khuôn mặt thành công", "employee_id": employee_id, "encoding_size": len(encoding)}
-
-
-@router.get("/meta/departments")
-def get_departments(db: Session = Depends(get_db), _=Depends(get_current_user)):
-    rows = db.query(models.Employee.department).distinct().all()
-    return [r[0] for r in rows if r[0]]
-
-
-@router.get("/me/profile")
-def get_my_profile(
-    db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    """Nhân viên xem thông tin của chính mình."""
-    if current_user.role != "employee":
-        raise HTTPException(status_code=403, detail="Chỉ dành cho nhân viên")
-    if not current_user.employee_id:
-        raise HTTPException(status_code=404, detail="Không tìm thấy hồ sơ nhân viên")
-    emp = db.query(models.Employee).filter(
-        models.Employee.id == current_user.employee_id
-    ).first()
-    if not emp:
-        raise HTTPException(status_code=404, detail="Không tìm thấy nhân viên")
-    return {
-        "id": emp.id,
-        "employee_code": emp.employee_code,
-        "full_name": emp.full_name,
-        "department": emp.department,
-        "position": emp.position,
-        "has_face": emp.has_face,
-    }

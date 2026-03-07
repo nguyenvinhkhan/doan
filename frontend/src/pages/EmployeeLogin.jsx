@@ -14,8 +14,7 @@ export default function EmployeeLogin() {
     setError(""); setLoading(true);
     try {
       const res = await axios.post(`${API}/api/auth/login`,
-        new URLSearchParams({ username: form.username, password: form.password }),
-        { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
+        { username: form.username, password: form.password }
       );
       const { access_token, user } = res.data;
 
@@ -27,7 +26,7 @@ export default function EmployeeLogin() {
       // Lưu token nhân viên riêng
       localStorage.setItem("employee_token", access_token);
       localStorage.setItem("employee_user", JSON.stringify(user));
-      navigate("/register-face");
+      navigate("/register-face-employee");
     } catch (err) {
       setError(err.response?.data?.detail || "Đăng nhập thất bại. Kiểm tra lại tên đăng nhập và mật khẩu.");
     } finally {

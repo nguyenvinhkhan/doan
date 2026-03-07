@@ -6,10 +6,35 @@ from routes import auth_route, employee_route, attendance_route, config_route, p
 from websocket import router as ws_router
 import models  # noqa: F401
 
+def run_migrations():
+    """Thêm các cột mới vào bảng đã tồn tại nếu chưa có."""
+    with engine.connect() as conn:
+        # Thêm cột employee_id vào bảng users nếu chưa có
+        conn.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name='users' AND column_name='employee_id'
+                ) THEN
+                    ALTER TABLE users ADD COLUMN employee_id INTEGER REFERENCES employees(id);
+                END IF;
+            END$$;
+        """)
+        conn.commit()
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Tạo bảng nếu chưa có
     Base.metadata.create_all(bind=engine)
+
+    # Chạy migration thủ công (thêm cột mới nếu thiếu)
+    try:
+        run_migrations()
+        print("[INIT] Migration hoàn tất")
+    except Exception as e:
+        print(f"[WARN] Migration lỗi (có thể bỏ qua): {e}")
+
     # Tạo tài khoản admin mặc định nếu chưa có
     from database import SessionLocal
     from auth import hash_password
@@ -60,14 +85,11 @@ app.include_router(auth_route.router,       prefix="/api/auth",       tags=["Aut
 app.include_router(employee_route.router,   prefix="/api/employees",  tags=["Employees"])
 app.include_router(attendance_route.router, prefix="/api/attendance", tags=["Attendance"])
 app.include_router(config_route.router,     prefix="/api/configs",    tags=["Configs"])
-
 app.include_router(export_route.router,     prefix="/api/export",     tags=["Export"])
-
-app.include_router(proxy_route.router, prefix="/proxy", tags=["Proxy"])
+app.include_router(proxy_route.router,      prefix="/proxy",          tags=["Proxy"])
 
 # Route công khai (không cần đăng nhập)
 app.include_router(public_route.router,     prefix="/public",         tags=["Public"])
-
 app.include_router(ws_router,               prefix="/ws",             tags=["WebSocket"])
 
 @app.get("/")

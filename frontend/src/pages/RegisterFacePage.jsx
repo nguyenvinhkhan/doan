@@ -21,12 +21,21 @@ export default function RegisterFacePage() {
   const token = localStorage.getItem("employee_token");
   const authHeader = { Authorization: `Bearer ${token}` };
 
-  // Kiểm tra đăng nhập
+  // Kiểm tra đăng nhập - lấy thông tin từ localStorage (đã lưu khi login)
   useEffect(() => {
     if (!token) { navigate("/employee-login"); return; }
-    axios.get(`${API}/api/employees/me/profile`, { headers: authHeader })
-      .then(r => setEmployee(r.data))
-      .catch(() => { localStorage.removeItem("employee_token"); navigate("/employee-login"); });
+    const userStr = localStorage.getItem("employee_user");
+    if (!userStr) { navigate("/employee-login"); return; }
+    try {
+      const user = JSON.parse(userStr);
+      if (user.role !== "employee" || !user.employee_id) {
+        navigate("/employee-login"); return;
+      }
+      // Lấy thêm thông tin nhân viên từ API
+      axios.get(`${API}/api/employees/${user.employee_id}`, { headers: authHeader })
+        .then(r => setEmployee(r.data))
+        .catch(() => { localStorage.removeItem("employee_token"); navigate("/employee-login"); });
+    } catch { navigate("/employee-login"); }
   }, []);
 
   // Bật camera
