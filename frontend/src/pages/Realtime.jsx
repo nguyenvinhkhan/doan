@@ -67,6 +67,13 @@ export default function Realtime() {
     return () => { wsRef.current?.close(); clearInterval(pingRef.current); };
   }, []);
 
+  // Fetch nhật ký hôm nay khi load trang
+  useEffect(() => {
+    publicApi.get("/public/today-feed")
+      .then(r => setFeed(r.data))
+      .catch(() => {}); // Nếu lỗi thì thôi, không crash
+  }, []);
+
   // Bật webcam
   const startWebcam = async () => {
     try {

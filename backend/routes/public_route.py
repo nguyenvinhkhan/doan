@@ -22,8 +22,8 @@ def public_face_checkin(
     db: Session = Depends(get_db),
 ):
     """Điểm danh công khai — không cần token."""
-    today = date.today().isoformat()
     now   = datetime.now(VN_TZ)
+    today = now.date().isoformat()  # Dùng giờ VN để tránh lệch ngày
 
     employees = db.query(models.Employee).filter(
         models.Employee.is_active == True,
@@ -89,3 +89,40 @@ def public_face_checkin(
             "late_threshold":  f"{late_hour:02d}:{late_minute:02d}",
             "time":            now.isoformat(),
         }
+
+
+@router.get("/today-feed")
+def get_today_feed(db: Session = Depends(get_db)):
+    """Lấy nhật ký chấm công hôm nay — public, dùng cho trang kiosk."""
+    today = datetime.now(VN_TZ).date().isoformat()
+    records = db.query(models.Attendance, models.Employee).join(
+        models.Employee, models.Attendance.employee_id == models.Employee.id
+    ).filter(
+        models.Attendance.date == today
+    ).order_by(models.Attendance.check_in.desc()).all()
+
+    feed = []
+    for att, emp in records:
+        if att.check_out:
+            feed.append({
+                "action": "check_out",
+                "employee": emp.full_name,
+                "employee_code": emp.employee_code,
+                "department": emp.department,
+                "confidence": att.confidence,
+                "status": att.status,
+                "time": att.check_out.isoformat() if att.check_out else None,
+            })
+        if att.check_in:
+            feed.append({
+                "action": "check_in",
+                "employee": emp.full_name,
+                "employee_code": emp.employee_code,
+                "department": emp.department,
+                "confidence": att.confidence,
+                "status": att.status,
+                "time": att.check_in.isoformat() if att.check_in else None,
+            })
+    # Sắp xếp theo thời gian mới nhất trước
+    feed.sort(key=lambda x: x["time"] or "", reverse=True)
+    return feed[:50]
