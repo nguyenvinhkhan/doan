@@ -77,9 +77,14 @@ export default function Realtime() {
   // Bật webcam
   const startWebcam = async () => {
     try {
-      const s = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "user", width: 1280, height: 720 }
-      });
+      const constraints = {
+        video: {
+          facingMode: "user",
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        }
+      };
+      const s = await navigator.mediaDevices.getUserMedia(constraints);
       streamRef.current = s;
       videoRef.current.srcObject = s;
       videoRef.current.src = "";
@@ -332,7 +337,7 @@ export default function Realtime() {
         </div>
 
         {/* Feed Panel */}
-        <div style={S.feedCol}>
+        <div style={S.feedCol} className="faceattend-feed">
           <div style={S.feedHeader}>
             <h3 style={S.feedTitle}>Nhật ký hôm nay</h3>
             <span style={S.feedCount}>{feed.length} sự kiện</span>
@@ -364,6 +369,12 @@ export default function Realtime() {
 
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&display=swap');
+        @media (min-width: 768px) {
+          .faceattend-body { flex-direction: row !important; }
+          .faceattend-feed { width: 300px !important; max-height: none !important; border-top: none !important; border-left: 1px solid rgba(255,255,255,0.06) !important; }
+        }
+        * { -webkit-tap-highlight-color: transparent; }
+        input, select, button { font-size: 16px !important; } /* Ngăn zoom trên iOS/Android khi focus */
         @keyframes scanMove { 0%{top:5%} 100%{top:95%} }
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
         @keyframes slideIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:none} }
@@ -379,7 +390,7 @@ export default function Realtime() {
 const S = {
   page: { minHeight: "100vh", background: "#07101f", fontFamily: "'Space Grotesk', sans-serif", display: "flex", flexDirection: "column" },
   // Header
-  header: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 32px", background: "rgba(0,0,0,0.4)", borderBottom: "1px solid rgba(0,229,255,0.1)", flexWrap: "wrap", gap: "12px" },
+  header: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", background: "rgba(0,0,0,0.4)", borderBottom: "1px solid rgba(0,229,255,0.1)", flexWrap: "wrap", gap: "8px" },
   brand: { display: "flex", alignItems: "center", gap: "10px" },
   brandDot: { width: "10px", height: "10px", borderRadius: "50%", background: "#00e5ff", boxShadow: "0 0 10px #00e5ff", animation: "pulse 2s infinite" },
   brandText: { color: "#fff", fontWeight: 700, fontSize: "20px" },
@@ -397,9 +408,11 @@ const S = {
   wsChip: { display: "flex", alignItems: "center", gap: "6px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "20px", padding: "6px 14px", color: "rgba(255,255,255,0.5)", fontSize: "12px" },
   wsDot: { width: "7px", height: "7px", borderRadius: "50%", flexShrink: 0 },
   // Body
-  body: { display: "flex", flex: 1, gap: "0", overflow: "hidden" },
-  cameraCol: { flex: 1, padding: "24px 28px", display: "flex", flexDirection: "column", gap: "16px", overflowY: "auto" },
-  feedCol: { width: "300px", flexShrink: 0, background: "rgba(0,0,0,0.3)", borderLeft: "1px solid rgba(255,255,255,0.06)", display: "flex", flexDirection: "column" },
+  body: { display: "flex", flex: 1, gap: "0", overflow: "hidden",
+    flexDirection: "column" }, // stack dọc mặc định, row trên desktop qua CSS
+
+  cameraCol: { flex: 1, padding: "16px", display: "flex", flexDirection: "column", gap: "14px", overflowY: "auto" },
+  feedCol: { width: "100%", flexShrink: 0, background: "rgba(0,0,0,0.3)", borderTop: "1px solid rgba(255,255,255,0.06)", display: "flex", flexDirection: "column", maxHeight: "320px" },
   // Cam tabs
   camTabs: { display: "flex", gap: "8px" },
   camTab: { background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px", padding: "8px 18px", color: "rgba(255,255,255,0.4)", cursor: "pointer", fontSize: "14px", fontFamily: "inherit" },
@@ -426,10 +439,10 @@ const S = {
   scanLabel: { position: "absolute", bottom: "20px", color: "#00e5ff", fontWeight: 600, fontSize: "14px" },
   autoBadge: { position: "absolute", top: "12px", right: "12px", background: "rgba(0,229,255,0.2)", border: "1px solid rgba(0,229,255,0.4)", borderRadius: "20px", padding: "4px 12px", color: "#00e5ff", fontSize: "12px" },
   // Controls
-  controls: { display: "flex", gap: "10px", flexWrap: "wrap" },
+  controls: { display: "flex", gap: "10px", flexWrap: "wrap", justifyContent: "center" },
   btnPrimary:  { background: "#00e5ff", color: "#07101f", border: "none", borderRadius: "10px", padding: "12px 24px", fontWeight: 700, cursor: "pointer", fontSize: "14px", fontFamily: "inherit" },
   btnSecondary:{ background: "rgba(255,255,255,0.07)", color: "#fff", border: "1px solid rgba(255,255,255,0.12)", borderRadius: "10px", padding: "12px 20px", cursor: "pointer", fontSize: "14px", fontFamily: "inherit" },
-  btnCapture:  { background: "#00ff88", color: "#07101f", border: "none", borderRadius: "10px", padding: "12px 28px", fontWeight: 700, cursor: "pointer", fontSize: "15px", fontFamily: "inherit" },
+  btnCapture:  { background: "#00ff88", color: "#07101f", border: "none", borderRadius: "10px", padding: "14px 28px", fontWeight: 700, cursor: "pointer", fontSize: "15px", fontFamily: "inherit", minHeight: "48px" },
   btnAuto:     { background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.6)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: "10px", padding: "12px 20px", cursor: "pointer", fontSize: "14px", fontFamily: "inherit" },
   btnAutoOn:   { background: "rgba(0,229,255,0.15)", color: "#00e5ff", borderColor: "rgba(0,229,255,0.4)" },
   btnStop:     { background: "rgba(255,92,92,0.1)", color: "#ff5c5c", border: "1px solid rgba(255,92,92,0.3)", borderRadius: "10px", padding: "12px 20px", cursor: "pointer", fontSize: "14px", fontFamily: "inherit" },

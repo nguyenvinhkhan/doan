@@ -28,7 +28,7 @@ export default function RegisterFace() {
   const startCamera = async () => {
     try {
       const s = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "user", width: 640, height: 480 }
+        video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } }
       });
       streamRef.current = s;
       videoRef.current.srcObject = s;
@@ -106,7 +106,7 @@ export default function RegisterFace() {
       <h2 style={S.heading}>Đăng Ký Khuôn Mặt</h2>
       <p style={S.sub}>Chụp nhiều góc để tăng độ chính xác nhận diện</p>
 
-      <div style={S.layout}>
+      <div style={S.layout} className="rf-layout">
         {/* Cột trái */}
         <div style={S.leftCol}>
 
@@ -214,7 +214,7 @@ export default function RegisterFace() {
         </div>
 
         {/* Cột phải */}
-        <div style={S.rightCol}>
+        <div style={S.rightCol} className="rf-rightcol">
           <div style={S.statsBox}>
             <div style={S.statItem}>
               <div style={{ color: "#00e5ff", fontWeight: 700, fontSize: "28px" }}>{employees.length}</div>
@@ -273,6 +273,12 @@ export default function RegisterFace() {
 
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&display=swap');
+        * { -webkit-tap-highlight-color: transparent; }
+        input, select, button { font-size: 16px !important; }
+        @media (max-width: 767px) {
+          .rf-layout { grid-template-columns: 1fr !important; }
+          .rf-rightcol { display: none !important; }
+        }
         select:focus { outline:none; border-color:#00e5ff !important; }
       `}</style>
     </div>
@@ -280,10 +286,10 @@ export default function RegisterFace() {
 }
 
 const S = {
-  page:    { padding: "32px", flex: 1, overflowY: "auto", fontFamily: "'Space Grotesk', sans-serif" },
+  page:    { padding: "16px", flex: 1, overflowY: "auto", fontFamily: "'Space Grotesk', sans-serif" },
   heading: { color: "#fff", fontSize: "26px", fontWeight: 700, margin: "0 0 4px" },
   sub:     { color: "rgba(255,255,255,0.35)", fontSize: "14px", marginBottom: "28px" },
-  layout:  { display: "grid", gridTemplateColumns: "1fr 300px", gap: "24px", alignItems: "start" },
+  layout:  { display: "grid", gridTemplateColumns: "1fr 300px", gap: "24px", alignItems: "start" }, // responsive qua CSS bên dưới
   leftCol: { display: "flex", flexDirection: "column", gap: "20px" },
   card:    { background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "14px", padding: "20px", display: "flex", flexDirection: "column", gap: "14px" },
   stepHeader: { display: "flex", alignItems: "center", gap: "10px" },

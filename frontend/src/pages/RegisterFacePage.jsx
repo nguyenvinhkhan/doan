@@ -46,7 +46,7 @@ export default function RegisterFacePage() {
   const startCamera = async () => {
     try {
       const s = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "user", width: 640, height: 480 }
+        video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } }
       });
       streamRef.current = s;
       videoRef.current.srcObject = s;
@@ -364,6 +364,8 @@ export default function RegisterFacePage() {
 
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&display=swap');
+        * { -webkit-tap-highlight-color: transparent; }
+        input, select, button { font-size: 16px !important; }
         * { box-sizing: border-box; }
         button:disabled { opacity: 0.5; cursor: not-allowed; }
       `}</style>
@@ -379,8 +381,8 @@ const S = {
   },
   header: {
     display: "flex", alignItems: "center", justifyContent: "space-between",
-    padding: "16px 24px", borderBottom: "1px solid rgba(255,255,255,0.07)",
-    background: "rgba(255,255,255,0.02)",
+    padding: "12px 16px", borderBottom: "1px solid rgba(255,255,255,0.07)",
+    background: "rgba(255,255,255,0.02)", flexWrap: "wrap", gap: "8px",
   },
   headerLeft: { display: "flex", alignItems: "center", gap: "12px" },
   headerTitle: { color: "#fff", fontWeight: 700, fontSize: "16px" },
@@ -391,8 +393,8 @@ const S = {
     fontSize: "13px", fontFamily: "inherit",
   },
   body: {
-    flex: 1, padding: "24px", maxWidth: "600px", width: "100%",
-    margin: "0 auto", display: "flex", flexDirection: "column", gap: "20px",
+    flex: 1, padding: "16px", maxWidth: "600px", width: "100%",
+    margin: "0 auto", display: "flex", flexDirection: "column", gap: "16px",
   },
   guideBox: {
     background: "rgba(0,229,255,0.04)", border: "1px solid rgba(0,229,255,0.15)",
@@ -425,8 +427,8 @@ const S = {
   controls: { display: "flex", gap: "10px" },
   btnPrimary: {
     background: "linear-gradient(135deg,#00e5ff,#0066ff)", color: "#fff",
-    border: "none", borderRadius: "10px", padding: "12px 20px",
-    fontWeight: 700, fontSize: "14px", cursor: "pointer", fontFamily: "inherit",
+    border: "none", borderRadius: "10px", padding: "14px 20px",
+    fontWeight: 700, fontSize: "14px", cursor: "pointer", fontFamily: "inherit", minHeight: "48px",
   },
   btnSecondary: {
     background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.6)",
@@ -461,8 +463,8 @@ const S = {
   },
   btnSave: {
     background: "linear-gradient(135deg,#00ff88,#00cc66)", color: "#0a0e1a",
-    border: "none", borderRadius: "10px", padding: "13px",
-    fontWeight: 700, fontSize: "15px", cursor: "pointer", fontFamily: "inherit",
+    border: "none", borderRadius: "10px", padding: "15px",
+    fontWeight: 700, fontSize: "15px", cursor: "pointer", fontFamily: "inherit", minHeight: "52px",
   },
   successBox: {
     display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
