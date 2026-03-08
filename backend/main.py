@@ -1,4 +1,6 @@
 from fastapi import FastAPI
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from database import Base, engine
@@ -18,6 +20,12 @@ def run_migrations():
                     WHERE table_name='users' AND column_name='employee_id'
                 ) THEN
                     ALTER TABLE users ADD COLUMN employee_id INTEGER REFERENCES employees(id);
+                END IF;
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name='attendance' AND column_name='note'
+                ) THEN
+                    ALTER TABLE attendance ADD COLUMN note TEXT;
                 END IF;
             END$$;
         """))
@@ -64,6 +72,45 @@ async def lifespan(app: FastAPI):
         db2.close()
 
     yield
+
+# ── Auto checkout cuối ngày ──────────────────────────────────────────────────
+def auto_checkout_yesterday():
+    """Chạy lúc 00:05 — tự động checkout các ca chưa checkout ngày hôm trước."""
+    from database import SessionLocal
+    import models
+    from datetime import datetime, timezone, timedelta
+
+    VN_TZ = timezone(timedelta(hours=7))
+    now = datetime.now(VN_TZ)
+    yesterday = (now - timedelta(days=1)).date().isoformat()
+
+    db = SessionLocal()
+    try:
+        # Lấy tất cả record hôm qua chưa có checkout
+        missing = db.query(models.Attendance).filter(
+            models.Attendance.date == yesterday,
+            models.Attendance.check_out.is_(None),
+        ).all()
+
+        # Gán checkout = 23:59:59 của ngày hôm qua
+        eod = datetime(now.year, now.month, now.day, 0, 0, 0, tzinfo=VN_TZ) - timedelta(seconds=1)
+        for rec in missing:
+            rec.check_out = eod
+            rec.note = "Auto checkout cuối ngày"
+        db.commit()
+        print(f"[AutoCheckout] {len(missing)} bản ghi ngày {yesterday} được checkout tự động")
+    except Exception as e:
+        print(f"[AutoCheckout] Lỗi: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
+
+# Khởi động scheduler
+_scheduler = BackgroundScheduler(timezone="Asia/Ho_Chi_Minh")
+_scheduler.add_job(auto_checkout_yesterday, CronTrigger(hour=0, minute=5))
+_scheduler.start()
+
 
 app = FastAPI(
     title="Hệ Thống Điểm Danh Khuôn Mặt",
