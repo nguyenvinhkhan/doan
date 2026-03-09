@@ -181,7 +181,14 @@ def register_face(
     if not images:
         raise HTTPException(status_code=400, detail="Thiếu ảnh khuôn mặt")
 
+    # Debug log
+    print(f"[DEBUG] Nhận {len(images)} ảnh")
+    for i, img in enumerate(images):
+        prefix = img[:30] if img else "EMPTY"
+        print(f"[DEBUG] Ảnh {i+1}: len={len(img)}, prefix={prefix}")
+
     encodings = get_face_encodings_multi(images)
+    print(f"[DEBUG] Encodings tìm được: {len(encodings) if encodings else 0}")
     if not encodings:
         raise HTTPException(status_code=422, detail="Không phát hiện khuôn mặt trong ảnh nào")
 

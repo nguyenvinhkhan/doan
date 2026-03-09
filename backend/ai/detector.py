@@ -314,9 +314,15 @@ def get_face_encodings_multi(images_base64: list) -> Optional[list]:
     Mỗi ảnh gốc sinh thêm 4 biến thể → tổng encoding tối đa = N*5.
     """
     encodings = []
-    for img_b64 in images_base64:
-        bgr = _base64_to_bgr(img_b64)
+    for idx, img_b64 in enumerate(images_base64):
+        try:
+            bgr = _base64_to_bgr(img_b64)
+            print(f"[DEBUG] Ảnh {idx+1}: shape={bgr.shape}, dtype={bgr.dtype}")
+        except Exception as e:
+            print(f"[DEBUG] Ảnh {idx+1}: decode lỗi — {e}")
+            continue
         gray, face = _get_best_face(bgr)
+        print(f"[DEBUG] Ảnh {idx+1}: face={'tìm thấy' if face is not None else 'KHÔNG tìm thấy'}")
         if face is None:
             continue
         # Encoding gốc
