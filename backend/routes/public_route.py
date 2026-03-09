@@ -7,12 +7,14 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timezone, timedelta, date
 import time
 import threading
+import asyncio
 
 VN_TZ = timezone(timedelta(hours=7))
 from database import get_db
 from ai.detector import unified_face_match
 from routes.config_route import get_config
 from schemas import FaceCheckIn
+from websocket import notify_attendance
 import models
 
 router = APIRouter()
@@ -46,7 +48,7 @@ def _check_rate_limit(ip: str):
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.post("/face-checkin")
-def public_face_checkin(
+async def public_face_checkin(
     request: Request,
     payload: FaceCheckIn,
     db: Session = Depends(get_db),
@@ -100,7 +102,7 @@ def public_face_checkin(
             })
         record.check_out = now
         db.commit()
-        return {
+        event = {
             "action":         "check_out",
             "employee":       best_emp.full_name,
             "employee_code":  best_emp.employee_code,
@@ -109,6 +111,9 @@ def public_face_checkin(
             "confidence_pct": f"{best_sim*100:.1f}%",
             "time":           now.isoformat(),
         }
+        # Broadcast realtime đến tất cả màn hình kiosk đang mở
+        asyncio.create_task(notify_attendance(event))
+        return event
     else:
         late_hour   = int(get_config(db, "late_hour"))
         late_minute = int(get_config(db, "late_minute"))
@@ -122,7 +127,7 @@ def public_face_checkin(
             confidence=best_sim,
         ))
         db.commit()
-        return {
+        event = {
             "action":          "check_in",
             "employee":        best_emp.full_name,
             "employee_code":   best_emp.employee_code,
@@ -133,6 +138,9 @@ def public_face_checkin(
             "late_threshold":  f"{late_hour:02d}:{late_minute:02d}",
             "time":            now.isoformat(),
         }
+        # Broadcast realtime đến tất cả màn hình kiosk đang mở
+        asyncio.create_task(notify_attendance(event))
+        return event
 
 
 @router.get("/today-feed")
