@@ -76,10 +76,14 @@ export default function RegisterFace() {
     if (!videoRef.current || !stream) return;
     if (photos.length >= 5) return;
     const canvas = canvasRef.current;
-    canvas.width  = videoRef.current.videoWidth  || 640;
-    canvas.height = videoRef.current.videoHeight || 480;
-    canvas.getContext("2d").drawImage(videoRef.current, 0, 0);
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
+    const MAX_SIZE = 640;
+    const vw = videoRef.current.videoWidth  || 640;
+    const vh = videoRef.current.videoHeight || 480;
+    const scale = Math.min(1, MAX_SIZE / Math.max(vw, vh));
+    canvas.width  = Math.round(vw * scale);
+    canvas.height = Math.round(vh * scale);
+    canvas.getContext("2d").drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.75);
     setPhotos(prev => {
       const next = [...prev, dataUrl];
       if (next.length < 5) {
