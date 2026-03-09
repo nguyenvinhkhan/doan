@@ -2,7 +2,7 @@ import base64
 import json
 import numpy as np
 from io import BytesIO
-from PIL import Image
+from PIL import Image, ImageOps
 from typing import Optional, Tuple
 import cv2
 
@@ -20,7 +20,10 @@ def _base64_to_bgr(image_base64: str) -> np.ndarray:
     if "," in image_base64:
         image_base64 = image_base64.split(",")[1]
     img_bytes = base64.b64decode(image_base64)
-    image = Image.open(BytesIO(img_bytes)).convert("RGB")
+    image = Image.open(BytesIO(img_bytes))
+    # Fix ảnh bị xoay do EXIF orientation trên camera mobile
+    image = ImageOps.exif_transpose(image)
+    image = image.convert("RGB")
     arr = np.array(image)
     return cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
 
@@ -72,14 +75,14 @@ def _detect_faces(gray: np.ndarray) -> np.ndarray:
     for cascade, scale, neighbors in params:
         faces = cascade.detectMultiScale(
             gray, scaleFactor=scale, minNeighbors=neighbors,
-            minSize=(48, 48), flags=cv2.CASCADE_SCALE_IMAGE
+            minSize=(30, 30), flags=cv2.CASCADE_SCALE_IMAGE
         )
         if len(faces) > 0:
             all_faces.append(faces)
 
     if not all_faces:
         # Thử profile face
-        faces = _CASCADE_PROFILE.detectMultiScale(gray, 1.1, 3, minSize=(48, 48))
+        faces = _CASCADE_PROFILE.detectMultiScale(gray, 1.1, 3, minSize=(30, 30))
         return np.array(faces) if len(faces) > 0 else np.array([])
 
     combined = np.vstack(all_faces)
