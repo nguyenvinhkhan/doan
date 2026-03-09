@@ -146,12 +146,19 @@ export default function Realtime() {
       // Tự động bật lại sau 10 giây
       setTimeout(() => setAutoScan(true), 10000);
     } catch (err) {
-      const msg = err.response?.data?.detail || "Không nhận diện được";
-      setResult({ success: false, message: msg });
-      // Nếu lỗi 404 (không nhận diện) → dừng 3 giây rồi mới cho scan lại
-      if (err.response?.status === 404) {
+      const detail = err.response?.data?.detail;
+      const code   = typeof detail === "object" ? detail?.code  : "UNKNOWN";
+      const msg    = typeof detail === "object" ? detail?.msg   : (detail || "Không nhận diện được");
+      const conf   = typeof detail === "object" ? detail?.confidence : null;
+      setResult({ success: false, code, message: msg, confidence: conf });
+      // Delay tuỳ theo loại lỗi
+      const delay = (code === "NO_FACE" || code === "POOR_LIGHT") ? 2000
+                  : (code === "LOW_CONFIDENCE" || code === "AMBIGUOUS") ? 3000
+                  : (code === "ALREADY_CHECKED_OUT") ? 5000
+                  : 3000;
+      if (err.response?.status === 404 || err.response?.status === 400) {
         setAutoScan(false);
-        setTimeout(() => setAutoScan(true), 3000);
+        setTimeout(() => setAutoScan(true), delay);
       }
     } finally {
       setScanning(false);
@@ -328,8 +335,35 @@ export default function Realtime() {
                 </>
               ) : (
                 <>
-                  <div style={S.resultIcon}>❌</div>
-                  <div style={{ color: "#ff5c5c", fontWeight: 600 }}>{result.message}</div>
+                  <div style={S.resultIcon}>
+                    {result.code === "NO_FACE"           ? "📷"
+                   : result.code === "POOR_LIGHT"        ? "💡"
+                   : result.code === "LOW_CONFIDENCE"    ? "🔍"
+                   : result.code === "AMBIGUOUS"         ? "👥"
+                   : result.code === "ALREADY_CHECKED_OUT" ? "✅"
+                   : result.code === "NOT_REGISTERED"   ? "❓"
+                   : "❌"}
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{
+                      color: result.code === "ALREADY_CHECKED_OUT" ? "#ffd600" : "#ff5c5c",
+                      fontWeight: 700, fontSize: "15px", marginBottom: "4px"
+                    }}>{result.message}</div>
+                    {result.confidence != null && (
+                      <div style={{ color: "rgba(255,255,255,0.35)", fontSize: "12px" }}>
+                        Điểm khớp cao nhất: {(result.confidence * 100).toFixed(1)}%
+                      </div>
+                    )}
+                    {result.code === "NO_FACE" && (
+                      <div style={S.resultHint}>💡 Đảm bảo khuôn mặt trong khung hình</div>
+                    )}
+                    {result.code === "POOR_LIGHT" && (
+                      <div style={S.resultHint}>💡 Tăng ánh sáng hoặc tránh ngược sáng</div>
+                    )}
+                    {result.code === "NOT_REGISTERED" && (
+                      <div style={S.resultHint}>💡 Liên hệ quản trị viên để đăng ký</div>
+                    )}
+                  </div>
                 </>
               )}
             </div>
@@ -454,6 +488,7 @@ const S = {
   resultMeta: { display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: "4px" },
   resultTime: { color: "rgba(255,255,255,0.35)", fontSize: "12px" },
   chip: { background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.6)", borderRadius: "20px", padding: "2px 10px", fontSize: "12px" },
+  resultHint: { color: "rgba(255,255,255,0.35)", fontSize: "12px", marginTop: "4px" },
   // Feed
   feedHeader: { padding: "16px 16px 12px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "space-between" },
   feedTitle:  { color: "#fff", fontWeight: 700, fontSize: "15px", margin: 0 },
