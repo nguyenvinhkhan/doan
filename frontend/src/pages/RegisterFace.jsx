@@ -26,16 +26,43 @@ export default function RegisterFace() {
   }, [photos.length]);
 
   const startCamera = async () => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setStatus({ type: "error", msg: "❌ Trình duyệt không hỗ trợ camera. Hãy dùng HTTPS hoặc Chrome/Safari mới nhất." });
+      return;
+    }
     try {
-      const s = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } }
-      });
+      let s;
+      try {
+        s = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "user" }, width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: false,
+        });
+      } catch {
+        try {
+          s = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: "user" },
+            audio: false,
+          });
+        } catch {
+          s = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        }
+      }
       streamRef.current = s;
-      videoRef.current.srcObject = s;
+      if (videoRef.current) {
+        videoRef.current.srcObject = s;
+      }
       setStream(true);
       setStatus({ type: "info", msg: "Camera đã bật. Nhìn thẳng vào camera và nhấn Chụp." });
-    } catch {
-      setStatus({ type: "error", msg: "❌ Không thể mở camera. Vui lòng cấp quyền camera!" });
+    } catch (err) {
+      const msg =
+        err.name === "NotAllowedError"
+          ? "❌ Chưa cấp quyền camera. Vào Cài đặt > Trình duyệt > Camera để cho phép."
+          : err.name === "NotFoundError"
+          ? "❌ Không tìm thấy camera trên thiết bị này."
+          : err.name === "NotReadableError"
+          ? "❌ Camera đang được ứng dụng khác sử dụng. Hãy đóng lại và thử lại."
+          : `❌ Không thể mở camera: ${err.message}`;
+      setStatus({ type: "error", msg });
     }
   };
 
@@ -146,7 +173,7 @@ export default function RegisterFace() {
           <div style={S.card}>
             <div style={S.stepHeader}><span style={S.stepNum}>2</span><span style={S.stepTitle}>Chụp ảnh ({photos.length}/5)</span></div>
             <div style={S.videoWrap}>
-              <video ref={videoRef} autoPlay muted playsInline
+              <video ref={videoRef} autoPlay muted playsInline webkit-playsinline="true"
                 style={{ width: "100%", height: "100%", objectFit: "cover", display: stream ? "block" : "none" }} />
               {!stream && (
                 <div style={S.camPlaceholder}>
