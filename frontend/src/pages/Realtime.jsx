@@ -75,22 +75,45 @@ export default function Realtime() {
   }, []);
 
   // Bật webcam
+ // Bật webcam
   const startWebcam = async () => {
+    // HTTP trên mobile không có mediaDevices → báo lỗi rõ ràng
+    if (!navigator.mediaDevices?.getUserMedia) {
+      alert("Trình duyệt không hỗ trợ camera.\nHãy dùng HTTPS hoặc Chrome/Safari mới nhất.");
+      return;
+    }
     try {
-      const constraints = {
-        video: {
-          facingMode: "user",
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
+      let s;
+      // Thử lần 1: front camera + resolution
+      try {
+        s = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "user" }, width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: false,
+        });
+      } catch {
+        // Thử lần 2: chỉ front camera, bỏ resolution
+        try {
+          s = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: "user" },
+            audio: false,
+          });
+        } catch {
+          // Thử lần 3: bất kỳ camera nào
+          s = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
         }
-      };
-      const s = await navigator.mediaDevices.getUserMedia(constraints);
+      }
       streamRef.current = s;
-      videoRef.current.srcObject = s;
-      videoRef.current.src = "";
+      if (videoRef.current) {
+        videoRef.current.srcObject = s;
+      }
       setStream(true);
-    } catch {
-      alert("Không thể truy cập webcam!");
+    } catch (err) {
+      const msg =
+        err.name === "NotAllowedError"  ? "Chưa cấp quyền camera. Vào Cài đặt > Trình duyệt > Camera để cho phép." :
+        err.name === "NotFoundError"    ? "Không tìm thấy camera trên thiết bị." :
+        err.name === "NotReadableError" ? "Camera đang được ứng dụng khác dùng." :
+        `Không thể mở camera: ${err.message}`;
+      alert(msg);
     }
   };
 
@@ -259,6 +282,7 @@ export default function Realtime() {
             <video
               ref={videoRef}
               autoPlay muted playsInline
+              webkit-playsinline="true"
               crossOrigin="anonymous"
               style={{ ...S.video, display: (stream && !isIPMode) ? "block" : "none" }}
             />

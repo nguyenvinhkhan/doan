@@ -36,36 +36,49 @@ export default function RegisterFacePage() {
 
   // ── Camera ────────────────────────────────────────────────────────────────
   const startCamera = async () => {
+    // HTTP trên mobile không có mediaDevices → báo lỗi rõ ràng
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setStatus({
+        type: "error",
+        msg: "❌ Trình duyệt không hỗ trợ camera. Hãy dùng HTTPS hoặc Chrome/Safari mới nhất.",
+      });
+      return;
+    }
     try {
-      // Thử camera trước mặt (front) — quan trọng trên mobile
-      const constraints = {
-        video: {
-          facingMode: { ideal: "user" },
-          width:  { ideal: 1280, min: 480 },
-          height: { ideal: 720,  min: 360 },
-        },
-        audio: false,
-      };
       let s;
+      // Thử lần 1: front camera + resolution cụ thể
       try {
-        s = await navigator.mediaDevices.getUserMedia(constraints);
+        s = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "user" }, width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: false,
+        });
       } catch {
-        // Fallback: thử không ép facingMode (iOS Safari đôi khi cần vậy)
-        s = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        // Thử lần 2: chỉ yêu cầu front camera, bỏ resolution
+        try {
+          s = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: "user" },
+            audio: false,
+          });
+        } catch {
+          // Thử lần 3: bất kỳ camera nào (fallback cuối cùng)
+          s = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        }
       }
       streamRef.current = s;
       if (videoRef.current) {
         videoRef.current.srcObject = s;
-        // Đảm bảo video play trên iOS
-        videoRef.current.setAttribute("playsinline", true);
-        await videoRef.current.play().catch(() => {});
       }
       setStream(true);
       setStatus({ type: "info", msg: "Camera đã bật. Nhìn thẳng vào camera rồi nhấn Chụp." });
     } catch (err) {
-      const msg = err.name === "NotAllowedError"
-        ? "❌ Chưa cấp quyền camera. Vào Cài đặt > Trình duyệt > Camera để cho phép."
-        : `❌ Không thể mở camera: ${err.message}`;
+      const msg =
+        err.name === "NotAllowedError"
+          ? "❌ Chưa cấp quyền camera. Vào Cài đặt > Trình duyệt > Camera để cho phép."
+          : err.name === "NotFoundError"
+          ? "❌ Không tìm thấy camera trên thiết bị này."
+          : err.name === "NotReadableError"
+          ? "❌ Camera đang được ứng dụng khác sử dụng. Hãy đóng lại và thử lại."
+          : `❌ Không thể mở camera: ${err.message}`;
       setStatus({ type: "error", msg });
     }
   };
@@ -271,9 +284,17 @@ export default function RegisterFacePage() {
               </div>
 
               <div style={S.videoWrap}>
-                <video ref={videoRef} autoPlay muted playsInline
-                  style={{ width: "100%", height: "100%", objectFit: "cover",
-                    display: stream ? "block" : "none", transform: "scaleX(-1)" }} />
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  muted
+                  playsInline
+                  webkit-playsinline="true"
+                  style={{
+                    width: "100%", height: "100%", objectFit: "cover",
+                    display: stream ? "block" : "none", transform: "scaleX(-1)"
+                  }}
+                />
                 {!stream && (
                   <div style={S.camPlaceholder}>
                     <div style={{ fontSize: "52px", marginBottom: "10px" }}>📷</div>
@@ -335,7 +356,6 @@ export default function RegisterFacePage() {
                       <div style={S.photoLabel}>Ảnh {i+1}</div>
                     </div>
                   ))}
-                  {/* Slot trống */}
                   {Array.from({ length: 5 - photos.length }).map((_, i) => (
                     <div key={`empty-${i}`} style={S.photoEmpty}>
                       <span style={{ fontSize: "20px", color: "rgba(255,255,255,0.15)" }}>+</span>
@@ -429,37 +449,25 @@ export default function RegisterFacePage() {
 
 const S = {
   page: { minHeight: "100vh", background: "linear-gradient(135deg,#07101f,#0d1628)", fontFamily: "'Space Grotesk',sans-serif", color: "#fff", display: "flex", flexDirection: "column" },
-
-  // Header
   header: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", background: "rgba(0,0,0,0.35)", borderBottom: "1px solid rgba(255,255,255,0.07)", flexWrap: "wrap", gap: "10px" },
   headerLeft: { display: "flex", alignItems: "center", gap: "12px" },
   avatarDot: { width: "40px", height: "40px", borderRadius: "50%", background: "linear-gradient(135deg,#00e5ff,#0066ff)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "18px", color: "#fff", flexShrink: 0 },
   headerTitle: { color: "#fff", fontWeight: 700, fontSize: "15px" },
   headerSub: { color: "rgba(255,255,255,0.4)", fontSize: "12px", marginTop: "2px" },
-
-  // Body
   body: { flex: 1, padding: "16px", maxWidth: "560px", width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", gap: "16px" },
-
-  // Buttons
   btnBlue:   { background: "linear-gradient(135deg,#00e5ff,#0066ff)", color: "#fff", border: "none", borderRadius: "10px", padding: "13px 20px", fontWeight: 700, cursor: "pointer", fontFamily: "inherit", minHeight: "48px" },
   btnGreen:  { background: "linear-gradient(135deg,#00ff88,#00cc66)", color: "#0a0e1a", border: "none", borderRadius: "10px", padding: "13px 20px", fontWeight: 700, cursor: "pointer", fontFamily: "inherit", minHeight: "48px" },
   btnGray:   { background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.6)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: "10px", padding: "12px 16px", cursor: "pointer", fontFamily: "inherit" },
   btnYellow: { background: "rgba(255,214,0,0.1)", border: "1px solid rgba(255,214,0,0.3)", color: "#ffd600", borderRadius: "8px", padding: "8px 14px", cursor: "pointer", fontFamily: "inherit", fontWeight: 600 },
   btnRed:    { background: "rgba(255,92,92,0.1)", border: "1px solid rgba(255,92,92,0.3)", color: "#ff5c5c", borderRadius: "8px", padding: "8px 14px", cursor: "pointer", fontFamily: "inherit" },
   btnSave:   { width: "100%", background: "linear-gradient(135deg,#00e5ff,#0066ff)", color: "#fff", border: "none", borderRadius: "12px", padding: "16px", fontWeight: 700, fontSize: "16px", cursor: "pointer", fontFamily: "inherit", minHeight: "54px" },
-
-  // Banner
   bannerUpgrade: { background: "rgba(0,229,255,0.07)", border: "1px solid rgba(0,229,255,0.25)", borderRadius: "12px", padding: "12px 16px", color: "#00e5ff", fontSize: "13px", display: "flex", alignItems: "flex-start", gap: "10px" },
   statusFace: { display: "flex", alignItems: "center", gap: "8px", justifyContent: "center", padding: "8px", background: "rgba(255,255,255,0.03)", borderRadius: "10px", border: "1px solid rgba(255,255,255,0.07)" },
-
-  // Guide
   guideBox: { background: "rgba(0,229,255,0.04)", border: "1px solid rgba(0,229,255,0.12)", borderRadius: "14px", padding: "16px" },
   guideTitle: { color: "#00e5ff", fontWeight: 700, fontSize: "13px", marginBottom: "12px" },
   guideGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "8px" },
   guideItem: { display: "flex", alignItems: "center", gap: "8px", background: "rgba(255,255,255,0.03)", borderRadius: "8px", padding: "8px 10px", fontSize: "13px" },
   tip: { background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "20px", padding: "4px 10px", fontSize: "12px", color: "rgba(255,255,255,0.5)" },
-
-  // Camera card
   cameraCard: { background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "14px", padding: "16px", display: "flex", flexDirection: "column", gap: "12px" },
   stepHeader: { display: "flex", alignItems: "center", gap: "10px" },
   stepNum: { width: "24px", height: "24px", borderRadius: "50%", background: "#00e5ff", color: "#07101f", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "12px", flexShrink: 0 },
@@ -471,8 +479,6 @@ const S = {
   faceHint: { color: "rgba(0,229,255,0.7)", fontSize: "12px", marginTop: "10px", fontWeight: 600 },
   photoCount: { position: "absolute", top: "10px", left: "12px", background: "rgba(0,0,0,0.6)", color: "#fff", borderRadius: "20px", padding: "3px 10px", fontSize: "12px", fontWeight: 700 },
   controls: { display: "flex", gap: "10px" },
-
-  // Photos
   photosCard: { background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "14px", padding: "16px", display: "flex", flexDirection: "column", gap: "14px" },
   photosGrid: { display: "flex", gap: "8px", flexWrap: "wrap" },
   photoWrap: { position: "relative", width: "88px", height: "88px", borderRadius: "10px", overflow: "hidden", border: "2px solid rgba(0,229,255,0.4)" },
@@ -480,11 +486,7 @@ const S = {
   photoRemove: { position: "absolute", top: "3px", right: "3px", background: "rgba(255,92,92,0.85)", color: "#fff", border: "none", borderRadius: "50%", width: "20px", height: "20px", cursor: "pointer", fontSize: "10px", display: "flex", alignItems: "center", justifyContent: "center" },
   photoLabel: { position: "absolute", bottom: 0, left: 0, right: 0, background: "rgba(0,0,0,0.55)", color: "#fff", fontSize: "10px", textAlign: "center", padding: "2px" },
   photoEmpty: { width: "88px", height: "88px", borderRadius: "10px", border: "2px dashed rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "center" },
-
-  // Success
   successBox: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "40px 20px", textAlign: "center" },
-
-  // Password modal
   overlay: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "20px" },
   pwdCard: { background: "#0d1628", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "16px", padding: "24px", width: "100%", maxWidth: "400px", display: "flex", flexDirection: "column", gap: "16px", boxShadow: "0 24px 64px rgba(0,0,0,0.6)" },
   pwdInput: { background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: "8px", padding: "12px 14px", color: "#fff", fontFamily: "inherit", width: "100%" },
