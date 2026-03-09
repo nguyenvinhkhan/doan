@@ -123,9 +123,9 @@ def _align_face(gray: np.ndarray, x: int, y: int, w: int, h: int) -> np.ndarray:
 
             angle = np.degrees(np.arctan2(cy2 - cy1, cx2 - cx1))
             if abs(angle) > 1.5:
-                cx_mid = (cx1 + cx2) // 2
-                cy_mid = (cy1 + cy2) // 2
-                M = cv2.getRotationMatrix2D((cx_mid, cy_mid), angle, 1.0)
+                cx_mid = int((cx1 + cx2) // 2)
+                cy_mid = int((cy1 + cy2) // 2)
+                M = cv2.getRotationMatrix2D((cx_mid, cy_mid), float(angle), 1.0)
                 face_roi = cv2.warpAffine(
                     face_roi, M, (face_roi.shape[1], face_roi.shape[0]),
                     flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE
