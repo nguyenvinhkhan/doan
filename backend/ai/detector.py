@@ -431,6 +431,9 @@ def unified_face_match(
             if isinstance(stored[0], list) else [np.array(stored, dtype=np.float32)]
         sims = []
         for kv in known_vecs:
+            # Bỏ qua encoding không cùng kích thước (dữ liệu cũ không tương thích)
+            if kv.shape != unknown_vec.shape:
+                continue
             na, nb = np.linalg.norm(kv), np.linalg.norm(unknown_vec)
             if na > 0 and nb > 0:
                 sims.append(float(np.dot(kv, unknown_vec) / (na * nb)))
