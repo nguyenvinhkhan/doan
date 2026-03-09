@@ -6,93 +6,15 @@ from datetime import datetime, date, timezone, timedelta
 
 VN_TZ = timezone(timedelta(hours=7))  # UTC+7
 from database import get_db
-from schemas import AttendanceOut, FaceCheckIn
+from schemas import AttendanceOut
 from auth import get_current_user, require_admin
-from ai.detector import compare_faces
 from routes.config_route import get_config
 import models
 
 router = APIRouter()
 
-
-@router.post("/face-checkin")
-def face_checkin(
-    payload: FaceCheckIn,
-    db: Session = Depends(get_db),
-    _=Depends(get_current_user),
-):
-    now   = datetime.now(VN_TZ)
-    today = now.date().isoformat()
-
-    employees = db.query(models.Employee).filter(
-        models.Employee.is_active == True,
-        models.Employee.face_encoding.isnot(None),
-    ).all()
-
-    if not employees:
-        raise HTTPException(status_code=404, detail="Chưa có nhân viên nào đăng ký khuôn mặt")
-
-    # Đọc ngưỡng nhận diện từ cấu hình
-    threshold = float(get_config(db, "face_threshold"))
-
-    best_match      = None
-    best_confidence = 0.0
-
-    for emp in employees:
-        is_match, confidence = compare_faces(emp.face_encoding, payload.image_base64, threshold)
-        if is_match and confidence > best_confidence:
-            best_match      = emp
-            best_confidence = confidence
-
-    if not best_match:
-        raise HTTPException(status_code=404, detail="Không nhận diện được khuôn mặt")
-
-    record = db.query(models.Attendance).filter(
-        models.Attendance.employee_id == best_match.id,
-        models.Attendance.date == today,
-    ).first()
-
-    if record:
-        if record.check_out:
-            raise HTTPException(status_code=400, detail=f"{best_match.full_name} đã điểm danh ra rồi")
-        record.check_out = now
-        db.commit()
-        db.refresh(record)
-        return {
-            "action": "check_out",
-            "employee": best_match.full_name,
-            "employee_code": best_match.employee_code,
-            "confidence": best_confidence,
-            "time": now.isoformat(),
-        }
-    else:
-        # Đọc giờ đi trễ từ cấu hình
-        late_hour   = int(get_config(db, "late_hour"))
-        late_minute = int(get_config(db, "late_minute"))
-
-        status = "present"
-        if now.hour > late_hour or (now.hour == late_hour and now.minute >= late_minute):
-            status = "late"
-
-        new_record = models.Attendance(
-            employee_id=best_match.id,
-            check_in=now,
-            date=today,
-            status=status,
-            confidence=best_confidence,
-        )
-        db.add(new_record)
-        db.commit()
-        db.refresh(new_record)
-        return {
-            "action": "check_in",
-            "employee": best_match.full_name,
-            "employee_code": best_match.employee_code,
-            "confidence": best_confidence,
-            "status": status,
-            "late_threshold": f"{late_hour:02d}:{late_minute:02d}",
-            "time": now.isoformat(),
-        }
+# Route /face-checkin đã được chuyển sang public_route.py (không cần token).
+# attendance_route.py chỉ giữ các route quản lý dữ liệu điểm danh.
 
 
 @router.get("/", response_model=List[AttendanceOut])

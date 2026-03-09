@@ -1,15 +1,3 @@
-"""
-Face detection & recognition — phiên bản cải tiến mạnh.
-
-Cải tiến so với phiên bản cũ:
-1. LBP vectorized (numpy) thay vì vòng for Python → nhanh hơn 50x, chính xác hơn
-2. Multi-scale face detection với NMS (Non-Maximum Suppression)
-3. Face alignment cải tiến — dùng cả 2 mắt + scale chuẩn hóa
-4. Gabor filter thêm vào descriptor — nhạy cảm với texture/vân da
-5. Augmentation khi đăng ký — lật/xoay nhẹ để tạo thêm encoding đa dạng
-6. Adaptive threshold: điều chỉnh threshold theo số lượng encodings
-7. So sánh: top-K voting thay vì weighted average đơn giản
-"""
 import base64
 import json
 import numpy as np
@@ -398,6 +386,79 @@ def compare_faces(
     is_match = top1 >= threshold and final_score >= threshold * 0.93
 
     return is_match, round(final_score, 4)
+
+
+def unified_face_match(
+    employees: list,
+    unknown_image_base64: str,
+    threshold: float = 0.75,
+) -> dict:
+    """
+    Hàm nhận diện khuôn mặt dùng CHUNG cho cả public_route và attendance_route.
+    Thuật toán: 70% top1 + 30% weighted-avg, yêu cầu margin >= 3% so với người thứ 2.
+
+    Args:
+        employees: list SQLAlchemy Employee objects (phải có face_encoding và id)
+        unknown_image_base64: ảnh base64 từ webcam
+        threshold: ngưỡng nhận diện
+
+    Returns dict với các key:
+        matched (bool), employee (obj|None), confidence (float),
+        error_code (str|None), error_msg (str|None)
+    """
+    unknown_enc = get_face_encoding(unknown_image_base64)
+    if unknown_enc is None:
+        return {
+            "matched": False, "employee": None, "confidence": 0.0,
+            "error_code": "NO_FACE",
+            "error_msg": "Không phát hiện khuôn mặt. Nhìn thẳng vào camera và đảm bảo đủ ánh sáng.",
+        }
+
+    unknown_vec = np.array(unknown_enc, dtype=np.float32)
+
+    def _best_sim(stored_json: str) -> float:
+        stored = json.loads(stored_json)
+        known_vecs = [np.array(e, dtype=np.float32) for e in stored] \
+            if isinstance(stored[0], list) else [np.array(stored, dtype=np.float32)]
+        sims = []
+        for kv in known_vecs:
+            na, nb = np.linalg.norm(kv), np.linalg.norm(unknown_vec)
+            if na > 0 and nb > 0:
+                sims.append(float(np.dot(kv, unknown_vec) / (na * nb)))
+        if not sims:
+            return 0.0
+        sims_arr = np.array(sims)
+        K = min(5, len(sims_arr))
+        top_k = np.sort(sims_arr)[::-1][:K]
+        weights = np.array([1.0 / (i + 1) for i in range(K)])
+        wavg = float(np.average(top_k, weights=weights))
+        top1 = float(sims_arr.max())
+        return round(top1 * 0.70 + wavg * 0.30, 4)
+
+    scores = sorted(
+        [(emp, _best_sim(emp.face_encoding)) for emp in employees],
+        key=lambda x: x[1], reverse=True,
+    )
+
+    best_emp, best_sim = scores[0]
+    second_sim = scores[1][1] if len(scores) > 1 else 0.0
+    margin = best_sim - second_sim
+    is_match = best_sim >= threshold and (len(scores) == 1 or margin >= 0.03)
+
+    if not is_match:
+        if best_sim >= threshold and margin < 0.03:
+            code, msg = "AMBIGUOUS", f"Khuôn mặt không rõ ràng ({best_sim*100:.0f}%). Nhìn thẳng và chụp lại."
+        elif best_sim >= threshold * 0.82:
+            code, msg = "LOW_CONFIDENCE", f"Gần khớp ({best_sim*100:.0f}%) nhưng chưa đủ tin cậy. Cải thiện ánh sáng."
+        elif best_sim >= threshold * 0.65:
+            code, msg = "POOR_LIGHT", "Không nhận diện được. Kiểm tra ánh sáng và nhìn thẳng vào camera."
+        else:
+            code, msg = "NOT_REGISTERED", "Khuôn mặt chưa đăng ký hoặc quá khác biệt. Liên hệ quản trị viên."
+        return {"matched": False, "employee": None, "confidence": round(best_sim, 4),
+                "error_code": code, "error_msg": msg}
+
+    return {"matched": True, "employee": best_emp, "confidence": round(best_sim, 4),
+            "error_code": None, "error_msg": None}
 
 
 def detect_faces_in_image(image_base64: str) -> int:

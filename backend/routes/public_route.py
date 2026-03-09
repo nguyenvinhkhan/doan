@@ -2,51 +2,61 @@
 Route công khai — không cần JWT.
 Dùng cho trang điểm danh realtime (màn hình kiosk/tablet).
 """
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, date
+import time
+import threading
 
 VN_TZ = timezone(timedelta(hours=7))
 from database import get_db
-from ai.detector import get_face_encoding, compare_faces
+from ai.detector import unified_face_match
 from routes.config_route import get_config
 from schemas import FaceCheckIn
 import models
-import numpy as np
 
 router = APIRouter()
 
 
-def _cosine_sim(a, b) -> float:
-    a, b = np.array(a, dtype=np.float32), np.array(b, dtype=np.float32)
-    na, nb = np.linalg.norm(a), np.linalg.norm(b)
-    if na == 0 or nb == 0:
-        return 0.0
-    return float(np.dot(a, b) / (na * nb))
+# ── Rate Limiter đơn giản (in-memory, per-IP) ─────────────────────────────────
+# Cho phép tối đa MAX_CALLS lần gọi trong TIME_WINDOW giây mỗi IP
+_rate_data: dict = {}        # {ip: [timestamp, ...]}
+_rate_lock = threading.Lock()
+MAX_CALLS   = 5              # max 5 lần checkin
+TIME_WINDOW = 10             # trong 10 giây
+
+def _check_rate_limit(ip: str):
+    now = time.time()
+    with _rate_lock:
+        timestamps = _rate_data.get(ip, [])
+        # Giữ lại chỉ những request trong TIME_WINDOW gần nhất
+        timestamps = [t for t in timestamps if now - t < TIME_WINDOW]
+        if len(timestamps) >= MAX_CALLS:
+            raise HTTPException(
+                status_code=429,
+                detail={
+                    "code": "RATE_LIMIT",
+                    "msg": f"Quá nhiều yêu cầu. Vui lòng chờ {TIME_WINDOW} giây rồi thử lại.",
+                }
+            )
+        timestamps.append(now)
+        _rate_data[ip] = timestamps
 
 
-def _best_sim_against_stored(stored_json: str, unknown_vec) -> float:
-    """Tính similarity cao nhất giữa unknown và tất cả encoding đã lưu."""
-    import json
-    stored = json.loads(stored_json)
-    if isinstance(stored[0], list):
-        known_vecs = [np.array(e, dtype=np.float32) for e in stored]
-    else:
-        known_vecs = [np.array(stored, dtype=np.float32)]
-    sims = [_cosine_sim(kv, unknown_vec) for kv in known_vecs]
-    weights = np.array([max(0, s) ** 2 for s in sims])
-    best_top = max(sims)
-    best_avg = float(np.average(sims, weights=weights)) if weights.sum() > 0 else best_top
-    # Trả về điểm kết hợp: 70% max + 30% weighted avg
-    return round(best_top * 0.7 + best_avg * 0.3, 4)
-
+# ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.post("/face-checkin")
 def public_face_checkin(
+    request: Request,
     payload: FaceCheckIn,
     db: Session = Depends(get_db),
 ):
     """Điểm danh công khai — không cần token."""
+
+    # Rate limit theo IP
+    client_ip = request.client.host if request.client else "unknown"
+    _check_rate_limit(client_ip)
+
     now   = datetime.now(VN_TZ)
     today = now.date().isoformat()
 
@@ -58,65 +68,25 @@ def public_face_checkin(
     if not employees:
         raise HTTPException(status_code=404, detail={
             "code": "NO_EMPLOYEES",
-            "msg": "Chưa có nhân viên nào đăng ký khuôn mặt"
+            "msg": "Chưa có nhân viên nào đăng ký khuôn mặt",
         })
 
     threshold = float(get_config(db, "face_threshold"))
 
-    # ── Bước 1: Trích xuất encoding từ ảnh chụp ──────────────────────────────
-    unknown_enc = get_face_encoding(payload.image_base64)
-    if unknown_enc is None:
+    # ── Nhận diện bằng hàm dùng chung ────────────────────────────────────────
+    result = unified_face_match(employees, payload.image_base64, threshold)
+
+    if not result["matched"]:
         raise HTTPException(status_code=404, detail={
-            "code": "NO_FACE",
-            "msg": "Không phát hiện khuôn mặt. Nhìn thẳng vào camera và đảm bảo đủ ánh sáng."
+            "code":       result["error_code"],
+            "msg":        result["error_msg"],
+            "confidence": result["confidence"],
         })
 
-    unknown_vec = np.array(unknown_enc, dtype=np.float32)
+    best_emp = result["employee"]
+    best_sim = result["confidence"]
 
-    # ── Bước 2: So sánh với TẤT CẢ nhân viên, chọn người khớp NHẤT ─────────
-    scores = []
-    for emp in employees:
-        sim = _best_sim_against_stored(emp.face_encoding, unknown_vec)
-        scores.append((emp, sim))
-
-    # Sắp xếp giảm dần theo điểm
-    scores.sort(key=lambda x: x[1], reverse=True)
-    best_emp, best_sim = scores[0]
-    second_sim = scores[1][1] if len(scores) > 1 else 0.0
-
-    # ── Bước 3: Kiểm tra ngưỡng + khoảng cách với người thứ 2 ───────────────
-    # Yêu cầu: vượt threshold VÀ cách xa người thứ 2 ít nhất 3%
-    margin = best_sim - second_sim
-    is_match = best_sim >= threshold and (len(scores) == 1 or margin >= 0.03)
-
-    if not is_match:
-        # Phân loại lỗi rõ ràng
-        if best_sim >= threshold and margin < 0.03:
-            raise HTTPException(status_code=404, detail={
-                "code": "AMBIGUOUS",
-                "msg": f"Khuôn mặt không rõ ràng ({best_sim*100:.0f}%). Nhìn thẳng và chụp lại.",
-                "confidence": round(best_sim, 4),
-            })
-        elif best_sim >= threshold * 0.82:
-            raise HTTPException(status_code=404, detail={
-                "code": "LOW_CONFIDENCE",
-                "msg": f"Gần khớp ({best_sim*100:.0f}%) nhưng chưa đủ tin cậy. Cải thiện ánh sáng.",
-                "confidence": round(best_sim, 4),
-            })
-        elif best_sim >= threshold * 0.65:
-            raise HTTPException(status_code=404, detail={
-                "code": "POOR_LIGHT",
-                "msg": "Không nhận diện được. Kiểm tra ánh sáng và nhìn thẳng vào camera.",
-                "confidence": round(best_sim, 4),
-            })
-        else:
-            raise HTTPException(status_code=404, detail={
-                "code": "NOT_REGISTERED",
-                "msg": "Khuôn mặt chưa đăng ký hoặc quá khác biệt. Liên hệ quản trị viên.",
-                "confidence": round(best_sim, 4),
-            })
-
-    # ── Bước 4: Ghi chấm công ────────────────────────────────────────────────
+    # ── Ghi chấm công ─────────────────────────────────────────────────────────
     record = db.query(models.Attendance).filter(
         models.Attendance.employee_id == best_emp.id,
         models.Attendance.date == today,
@@ -126,7 +96,7 @@ def public_face_checkin(
         if record.check_out:
             raise HTTPException(status_code=400, detail={
                 "code": "ALREADY_CHECKED_OUT",
-                "msg": f"{best_emp.full_name} đã điểm danh ra ca rồi.",
+                "msg":  f"{best_emp.full_name} đã điểm danh ra ca rồi.",
             })
         record.check_out = now
         db.commit()
@@ -135,7 +105,7 @@ def public_face_checkin(
             "employee":       best_emp.full_name,
             "employee_code":  best_emp.employee_code,
             "department":     best_emp.department,
-            "confidence":     round(best_sim, 4),
+            "confidence":     best_sim,
             "confidence_pct": f"{best_sim*100:.1f}%",
             "time":           now.isoformat(),
         }
@@ -149,7 +119,7 @@ def public_face_checkin(
             check_in=now,
             date=today,
             status=status,
-            confidence=round(best_sim, 4),
+            confidence=best_sim,
         ))
         db.commit()
         return {
@@ -157,7 +127,7 @@ def public_face_checkin(
             "employee":        best_emp.full_name,
             "employee_code":   best_emp.employee_code,
             "department":      best_emp.department,
-            "confidence":      round(best_sim, 4),
+            "confidence":      best_sim,
             "confidence_pct":  f"{best_sim*100:.1f}%",
             "status":          status,
             "late_threshold":  f"{late_hour:02d}:{late_minute:02d}",

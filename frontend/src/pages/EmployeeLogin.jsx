@@ -1,8 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
-
-const API = import.meta.env.VITE_API_URL || "http://localhost:8000";
+import { employeeApi } from "../api/axios";
 
 export default function EmployeeLogin() {
   const [form, setForm]   = useState({ username: "", password: "" });
@@ -13,7 +11,7 @@ export default function EmployeeLogin() {
   const handleLogin = async () => {
     setError(""); setLoading(true);
     try {
-      const res = await axios.post(`${API}/api/auth/login`,
+      const res = await employeeApi.post("/auth/login",
         { username: form.username, password: form.password }
       );
       const { access_token, user } = res.data;
@@ -60,7 +58,7 @@ export default function EmployeeLogin() {
           <input
             type="password"
             style={S.input}
-            placeholder="Mật khẩu mặc định: 123456"
+            placeholder="Nhập mật khẩu"
             value={form.password}
             onChange={e => setForm(p => ({ ...p, password: e.target.value }))}
             onKeyDown={e => e.key === "Enter" && handleLogin()}
@@ -75,7 +73,7 @@ export default function EmployeeLogin() {
 
         <div style={S.hint}>
           <span style={{ color: "rgba(255,255,255,0.3)", fontSize: "13px" }}>
-            Tên đăng nhập = Mã nhân viên (chữ thường) &nbsp;•&nbsp; Mật khẩu mặc định: 123456
+            Tên đăng nhập = Mã nhân viên (chữ thường)
           </span>
         </div>
 

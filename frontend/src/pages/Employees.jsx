@@ -62,7 +62,19 @@ export default function Employees() {
   return (
     <div style={styles.page}>
       <div style={styles.header}>
-        <h2 style={styles.heading}>Quản Lý Nhân Viên</h2>
+        <div>
+          <h2 style={styles.heading}>Quản Lý Nhân Viên</h2>
+          {!loading && (
+            <span style={{ color: "rgba(255,255,255,0.4)", fontSize: "13px" }}>
+              Hiển thị {employees.length} nhân viên
+              {employees.length === 100 && (
+                <span style={{ color: "#ffd600", marginLeft: "6px" }}>
+                  (tối đa 100 — hãy dùng bộ lọc để tìm kiếm chính xác hơn)
+                </span>
+              )}
+            </span>
+          )}
+        </div>
         <button onClick={openCreate} style={styles.btnAdd}>+ Thêm nhân viên</button>
       </div>
 

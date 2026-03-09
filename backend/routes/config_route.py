@@ -95,21 +95,32 @@ def update_config(
         raise HTTPException(status_code=400, detail="Thiếu giá trị value")
     
     # Validate giá trị
-    if key in ["late_hour"] and not str(value).isdigit():
-        from fastapi import HTTPException
-        raise HTTPException(status_code=400, detail="Giờ phải là số nguyên (0-23)")
-    if key in ["late_minute"] and not str(value).isdigit():
-        from fastapi import HTTPException
-        raise HTTPException(status_code=400, detail="Phút phải là số nguyên (0-59)")
+    from fastapi import HTTPException
+    if key == "late_hour":
+        try:
+            v = int(value)
+            if not (0 <= v <= 23):
+                raise HTTPException(status_code=400, detail="Giờ phải từ 0 đến 23")
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail="Giờ phải là số nguyên (0-23)")
+    if key == "late_minute":
+        try:
+            v = int(value)
+            if not (0 <= v <= 59):
+                raise HTTPException(status_code=400, detail="Phút phải từ 0 đến 59")
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail="Phút phải là số nguyên (0-59)")
     if key == "face_threshold":
         try:
             v = float(value)
             if not (0.0 <= v <= 1.0):
-                from fastapi import HTTPException
                 raise HTTPException(status_code=400, detail="Ngưỡng phải từ 0.0 đến 1.0")
-        except ValueError:
-            from fastapi import HTTPException
+        except (ValueError, TypeError):
             raise HTTPException(status_code=400, detail="Ngưỡng phải là số thực")
+    if key == "work_start" or key == "work_end":
+        import re
+        if not re.match(r"^\d{2}:\d{2}$", str(value)):
+            raise HTTPException(status_code=400, detail="Định dạng giờ phải là HH:MM (vd: 08:00)")
 
     record = db.query(models.SystemConfig).filter(
         models.SystemConfig.key == key

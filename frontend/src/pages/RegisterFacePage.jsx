@@ -1,8 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
-
-const API = import.meta.env.VITE_API_URL || "http://localhost:8000";
+import { employeeApi } from "../api/axios";
 
 export default function RegisterFacePage() {
   const navigate   = useNavigate();
@@ -22,18 +20,15 @@ export default function RegisterFacePage() {
   const [pwdStatus, setPwdStatus] = useState(null);
   const [pwdSaving, setPwdSaving] = useState(false);
 
-  const token     = localStorage.getItem("employee_token");
-  const authHdr   = { Authorization: `Bearer ${token}` };
-
   // ── Kiểm tra đăng nhập ────────────────────────────────────────────────────
   useEffect(() => {
-    if (!token) { navigate("/employee-login"); return; }
+    const token   = localStorage.getItem("employee_token");
     const userStr = localStorage.getItem("employee_user");
-    if (!userStr) { navigate("/employee-login"); return; }
+    if (!token || !userStr) { navigate("/employee-login"); return; }
     try {
       const user = JSON.parse(userStr);
       if (user.role !== "employee" || !user.employee_id) { navigate("/employee-login"); return; }
-      axios.get(`${API}/api/employees/${user.employee_id}`, { headers: authHdr })
+      employeeApi.get(`/employees/${user.employee_id}`)
         .then(r => setEmployee(r.data))
         .catch(() => { localStorage.removeItem("employee_token"); navigate("/employee-login"); });
     } catch { navigate("/employee-login"); }
@@ -42,15 +37,36 @@ export default function RegisterFacePage() {
   // ── Camera ────────────────────────────────────────────────────────────────
   const startCamera = async () => {
     try {
-      const s = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } }
-      });
+      // Thử camera trước mặt (front) — quan trọng trên mobile
+      const constraints = {
+        video: {
+          facingMode: { ideal: "user" },
+          width:  { ideal: 1280, min: 480 },
+          height: { ideal: 720,  min: 360 },
+        },
+        audio: false,
+      };
+      let s;
+      try {
+        s = await navigator.mediaDevices.getUserMedia(constraints);
+      } catch {
+        // Fallback: thử không ép facingMode (iOS Safari đôi khi cần vậy)
+        s = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      }
       streamRef.current = s;
-      videoRef.current.srcObject = s;
+      if (videoRef.current) {
+        videoRef.current.srcObject = s;
+        // Đảm bảo video play trên iOS
+        videoRef.current.setAttribute("playsinline", true);
+        await videoRef.current.play().catch(() => {});
+      }
       setStream(true);
       setStatus({ type: "info", msg: "Camera đã bật. Nhìn thẳng vào camera rồi nhấn Chụp." });
-    } catch {
-      setStatus({ type: "error", msg: "❌ Không thể mở camera. Vui lòng cấp quyền camera." });
+    } catch (err) {
+      const msg = err.name === "NotAllowedError"
+        ? "❌ Chưa cấp quyền camera. Vào Cài đặt > Trình duyệt > Camera để cho phép."
+        : `❌ Không thể mở camera: ${err.message}`;
+      setStatus({ type: "error", msg });
     }
   };
 
@@ -98,10 +114,9 @@ export default function RegisterFacePage() {
     setSaving(true);
     setStatus({ type: "info", msg: "⏳ Đang xử lý và lưu khuôn mặt..." });
     try {
-      const res = await axios.post(
-        `${API}/api/employees/${employee.id}/register-face`,
+      const res = await employeeApi.post(
+        `/employees/${employee.id}/register-face`,
         { images_base64: photos },
-        { headers: authHdr }
       );
       const count = res.data?.encodings_count || photos.length;
       setDone(true);
@@ -125,9 +140,8 @@ export default function RegisterFacePage() {
     setPwdSaving(true);
     setPwdStatus(null);
     try {
-      await axios.post(`${API}/api/auth/change-password`,
+      await employeeApi.post("/auth/change-password",
         { current_password: pwdForm.current, new_password: pwdForm.next },
-        { headers: authHdr }
       );
       setPwdStatus({ type: "success", msg: "✅ Đổi mật khẩu thành công!" });
       setPwdForm({ current: "", next: "", confirm: "" });
