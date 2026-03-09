@@ -106,6 +106,10 @@ export default function RegisterFace() {
       <h2 style={S.heading}>Đăng Ký Khuôn Mặt</h2>
       <p style={S.sub}>Chụp nhiều góc để tăng độ chính xác nhận diện</p>
 
+      <div style={{ background: "rgba(0,229,255,0.07)", border: "1px solid rgba(0,229,255,0.25)", borderRadius: "12px", padding: "12px 18px", marginBottom: "20px", color: "#00e5ff", fontSize: "13px", display: "flex", alignItems: "center", gap: "10px" }}>
+        <span style={{ fontSize: "20px" }}>🔄</span>
+        <span><strong>Thuật toán mới:</strong> Nhân viên đã đăng ký trước đây nên <strong>đăng ký lại</strong> để đạt độ chính xác tốt nhất (LBP vectorized + Gabor + augmentation).</span>
+      </div>
       <div style={S.layout} className="rf-layout">
         {/* Cột trái */}
         <div style={S.leftCol}>

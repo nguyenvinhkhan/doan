@@ -5,44 +5,41 @@ import axios from "axios";
 const API = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 export default function RegisterFacePage() {
-  const navigate  = useNavigate();
-  const videoRef  = useRef(null);
-  const canvasRef = useRef(null);
-  const streamRef = useRef(null);
+  const navigate   = useNavigate();
+  const videoRef   = useRef(null);
+  const canvasRef  = useRef(null);
+  const streamRef  = useRef(null);
 
-  const [employee, setEmployee] = useState(null);
-  const [stream,   setStream]   = useState(false);
+  const [employee,  setEmployee]  = useState(null);
+  const [stream,    setStream]    = useState(false);
   const [capturing, setCapturing] = useState(false);
-  const [photos,   setPhotos]   = useState([]); // ảnh đã chụp (tối đa 5)
-  const [status,   setStatus]   = useState(null);
-  const [saving,   setSaving]   = useState(false);
-  const [done,     setDone]     = useState(false);
-  const [showPwd,  setShowPwd]  = useState(false);
-  const [pwdForm,  setPwdForm]  = useState({ current: "", next: "", confirm: "" });
+  const [photos,    setPhotos]    = useState([]);
+  const [status,    setStatus]    = useState(null);
+  const [saving,    setSaving]    = useState(false);
+  const [done,      setDone]      = useState(false);
+  const [showPwd,   setShowPwd]   = useState(false);
+  const [pwdForm,   setPwdForm]   = useState({ current: "", next: "", confirm: "" });
   const [pwdStatus, setPwdStatus] = useState(null);
   const [pwdSaving, setPwdSaving] = useState(false);
 
-  const token = localStorage.getItem("employee_token");
-  const authHeader = { Authorization: `Bearer ${token}` };
+  const token     = localStorage.getItem("employee_token");
+  const authHdr   = { Authorization: `Bearer ${token}` };
 
-  // Kiểm tra đăng nhập - lấy thông tin từ localStorage (đã lưu khi login)
+  // ── Kiểm tra đăng nhập ────────────────────────────────────────────────────
   useEffect(() => {
     if (!token) { navigate("/employee-login"); return; }
     const userStr = localStorage.getItem("employee_user");
     if (!userStr) { navigate("/employee-login"); return; }
     try {
       const user = JSON.parse(userStr);
-      if (user.role !== "employee" || !user.employee_id) {
-        navigate("/employee-login"); return;
-      }
-      // Lấy thêm thông tin nhân viên từ API
-      axios.get(`${API}/api/employees/${user.employee_id}`, { headers: authHeader })
+      if (user.role !== "employee" || !user.employee_id) { navigate("/employee-login"); return; }
+      axios.get(`${API}/api/employees/${user.employee_id}`, { headers: authHdr })
         .then(r => setEmployee(r.data))
         .catch(() => { localStorage.removeItem("employee_token"); navigate("/employee-login"); });
     } catch { navigate("/employee-login"); }
   }, []);
 
-  // Bật camera
+  // ── Camera ────────────────────────────────────────────────────────────────
   const startCamera = async () => {
     try {
       const s = await navigator.mediaDevices.getUserMedia({
@@ -51,13 +48,12 @@ export default function RegisterFacePage() {
       streamRef.current = s;
       videoRef.current.srcObject = s;
       setStream(true);
-      setStatus({ type: "info", msg: "Camera đã bật. Hãy nhìn thẳng vào camera và nhấn Chụp." });
+      setStatus({ type: "info", msg: "Camera đã bật. Nhìn thẳng vào camera rồi nhấn Chụp." });
     } catch {
-      setStatus({ type: "error", msg: "Không thể mở camera. Vui lòng cấp quyền camera cho trình duyệt." });
+      setStatus({ type: "error", msg: "❌ Không thể mở camera. Vui lòng cấp quyền camera." });
     }
   };
 
-  // Tắt camera
   const stopCamera = () => {
     streamRef.current?.getTracks().forEach(t => t.stop());
     streamRef.current = null;
@@ -72,82 +68,70 @@ export default function RegisterFacePage() {
     }
   }, [photos.length]);
 
-  // Tự tắt camera khi đủ 5 ảnh
-  useEffect(() => {
-    if (photos.length >= 5 && stream) {
-      stopCamera();
-      setStatus({ type: "success", msg: "✅ Đã chụp đủ 5 ảnh! Nhấn Lưu khuôn mặt để hoàn tất." });
-    }
-  }, [photos.length]);
-
-  // Chụp ảnh
+  // ── Chụp ảnh ─────────────────────────────────────────────────────────────
   const capture = useCallback(() => {
-    if (!videoRef.current || capturing) return;
-    if (photos.length >= 5) {
-      setStatus({ type: "warn", msg: "Đã đủ 5 ảnh. Nhấn Lưu khuôn mặt để hoàn tất." });
-      return;
-    }
+    if (!videoRef.current || capturing || photos.length >= 5) return;
     setCapturing(true);
     const canvas = canvasRef.current;
     canvas.width  = videoRef.current.videoWidth  || 640;
     canvas.height = videoRef.current.videoHeight || 480;
     canvas.getContext("2d").drawImage(videoRef.current, 0, 0);
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
     setPhotos(prev => {
       const next = [...prev, dataUrl];
       if (next.length < 5) {
-        setStatus({ type: "success", msg: `✅ Đã chụp ${next.length}/5 ảnh. Thay đổi góc mặt nhẹ rồi chụp tiếp.` });
+        setStatus({ type: "success", msg: `✅ Ảnh ${next.length}/5. Thay đổi góc mặt nhẹ rồi chụp tiếp.` });
       }
       return next;
     });
-    setTimeout(() => setCapturing(false), 500);
-  }, [photos, capturing]);
+    setTimeout(() => setCapturing(false), 400);
+  }, [capturing, photos.length]);
 
-  // Xóa ảnh
   const removePhoto = (idx) => {
     setPhotos(prev => prev.filter((_, i) => i !== idx));
-    setStatus({ type: "info", msg: "Đã xóa ảnh. Chụp lại nếu cần." });
+    setStatus({ type: "info", msg: "Đã xóa ảnh." });
   };
 
-  // Lưu khuôn mặt
+  // ── Lưu khuôn mặt ────────────────────────────────────────────────────────
   const saveFace = async () => {
-    if (photos.length === 0) {
-      setStatus({ type: "error", msg: "Chưa có ảnh nào. Vui lòng chụp ít nhất 1 ảnh." });
-      return;
-    }
+    if (!photos.length) return;
     setSaving(true);
     setStatus({ type: "info", msg: "⏳ Đang xử lý và lưu khuôn mặt..." });
     try {
-      await axios.post(
+      const res = await axios.post(
         `${API}/api/employees/${employee.id}/register-face`,
         { images_base64: photos },
-        { headers: authHeader }
+        { headers: authHdr }
       );
+      const count = res.data?.encodings_count || photos.length;
       setDone(true);
       stopCamera();
-      setStatus({ type: "success", msg: "🎉 Đăng ký thành công! Đang chuyển về trang chấm công..." });
+      setStatus({ type: "success", msg: `🎉 Đăng ký thành công! Đã lưu ${count} encoding. Đang chuyển trang...` });
       setTimeout(() => navigate("/checkin"), 3000);
     } catch (err) {
-      setStatus({ type: "error", msg: "❌ " + (err.response?.data?.detail || "Lưu thất bại. Thử chụp lại ảnh rõ hơn.") });
+      const detail = err.response?.data?.detail;
+      const msg = typeof detail === "object" ? detail?.msg : (detail || "Lưu thất bại. Thử chụp lại ảnh rõ hơn.");
+      setStatus({ type: "error", msg: "❌ " + msg });
     } finally {
       setSaving(false);
     }
   };
 
+  // ── Đổi mật khẩu ─────────────────────────────────────────────────────────
   const changePassword = async () => {
-    if (!pwdForm.current) { setPwdStatus({ type: "error", msg: "Nhập mật khẩu hiện tại" }); return; }
-    if (pwdForm.next.length < 6) { setPwdStatus({ type: "error", msg: "Mật khẩu mới phải ít nhất 6 ký tự" }); return; }
+    if (!pwdForm.current)            { setPwdStatus({ type: "error", msg: "Nhập mật khẩu hiện tại" }); return; }
+    if (pwdForm.next.length < 6)     { setPwdStatus({ type: "error", msg: "Mật khẩu mới phải ít nhất 6 ký tự" }); return; }
     if (pwdForm.next !== pwdForm.confirm) { setPwdStatus({ type: "error", msg: "Xác nhận mật khẩu không khớp" }); return; }
     setPwdSaving(true);
     setPwdStatus(null);
     try {
       await axios.post(`${API}/api/auth/change-password`,
         { current_password: pwdForm.current, new_password: pwdForm.next },
-        { headers: authHeader }
+        { headers: authHdr }
       );
       setPwdStatus({ type: "success", msg: "✅ Đổi mật khẩu thành công!" });
       setPwdForm({ current: "", next: "", confirm: "" });
-      setTimeout(() => setShowPwd(false), 1500);
+      setTimeout(() => { setShowPwd(false); setPwdStatus(null); }, 1800);
     } catch (err) {
       setPwdStatus({ type: "error", msg: "❌ " + (err.response?.data?.detail || "Đổi mật khẩu thất bại") });
     } finally {
@@ -162,158 +146,231 @@ export default function RegisterFacePage() {
     navigate("/employee-login");
   };
 
+  const C = {
+    success: { border: "rgba(0,255,136,0.3)",  bg: "rgba(0,255,136,0.07)",  text: "#00ff88" },
+    error:   { border: "rgba(255,92,92,0.3)",   bg: "rgba(255,92,92,0.07)",   text: "#ff5c5c" },
+    warn:    { border: "rgba(255,214,0,0.3)",   bg: "rgba(255,214,0,0.07)",   text: "#ffd600" },
+    info:    { border: "rgba(0,229,255,0.3)",   bg: "rgba(0,229,255,0.07)",   text: "#00e5ff" },
+  };
+
   return (
     <div style={S.page}>
       <canvas ref={canvasRef} style={{ display: "none" }} />
 
-      {/* Header */}
+      {/* ── Header ── */}
       <div style={S.header}>
         <div style={S.headerLeft}>
-          <span style={{ fontSize: "24px" }}>👤</span>
+          <div style={S.avatarDot}>{employee?.full_name?.[0] || "👤"}</div>
           <div>
             <div style={S.headerTitle}>Đăng ký khuôn mặt</div>
             {employee && (
               <div style={S.headerSub}>
-                {employee.full_name} &nbsp;•&nbsp; {employee.employee_code}
-                {employee.department && <> &nbsp;•&nbsp; {employee.department}</>}
+                {employee.full_name} • {employee.employee_code}
+                {employee.department ? ` • ${employee.department}` : ""}
               </div>
             )}
           </div>
         </div>
-        <div style={{ display: "flex", gap: "8px" }}>
-          <button onClick={() => { setShowPwd(p => !p); setPwdStatus(null); }} style={S.btnChangePwd}>🔑 Đổi mật khẩu</button>
-          <button onClick={logout} style={S.btnLogout}>Đăng xuất</button>
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+          <button onClick={() => { setShowPwd(p => !p); setPwdStatus(null); }} style={S.btnYellow}>
+            🔑 Đổi mật khẩu
+          </button>
+          <button onClick={logout} style={S.btnRed}>Đăng xuất</button>
         </div>
       </div>
 
       <div style={S.body}>
-        {/* Đã đăng ký thành công */}
-        {done && (
+
+        {/* ── Thành công ── */}
+        {done ? (
           <div style={S.successBox}>
-            <div style={{ fontSize: "64px", marginBottom: "16px" }}>🎉</div>
-            <div style={{ color: "#00ff88", fontSize: "22px", fontWeight: 700, marginBottom: "8px" }}>
+            <div style={{ fontSize: "72px", marginBottom: "16px" }}>🎉</div>
+            <div style={{ color: "#00ff88", fontSize: "24px", fontWeight: 700, marginBottom: "8px" }}>
               Đăng ký thành công!
             </div>
-            <div style={{ color: "rgba(255,255,255,0.6)", fontSize: "15px", marginBottom: "24px" }}>
-              Khuôn mặt của bạn đã được lưu. Bạn có thể chấm công bằng khuôn mặt từ bây giờ.
+            <div style={{ color: "rgba(255,255,255,0.5)", fontSize: "15px", marginBottom: "28px", textAlign: "center" }}>
+              Khuôn mặt đã được lưu với thuật toán mới.<br />Bạn có thể chấm công bằng khuôn mặt ngay bây giờ.
             </div>
-            <button onClick={() => navigate("/checkin")} style={S.btnPrimary}>✅ Về trang chấm công</button>
+            <button onClick={() => navigate("/checkin")} style={S.btnGreen}>
+              ✅ Về trang chấm công
+            </button>
           </div>
-        )}
-
-        {!done && (
+        ) : (
           <>
-            {/* Hướng dẫn */}
+            {/* ── Banner nhắc đăng ký lại nếu đã có encoding cũ ── */}
+            {employee?.has_face && (
+              <div style={S.bannerUpgrade}>
+                <span style={{ fontSize: "18px" }}>🔄</span>
+                <span>
+                  <strong>Thuật toán mới:</strong> Bạn đã đăng ký trước đây.
+                  Hãy <strong>đăng ký lại</strong> để nhận diện chính xác hơn (LBP + Gabor + augmentation).
+                </span>
+              </div>
+            )}
+
+            {/* ── Trạng thái khuôn mặt ── */}
+            {employee && (
+              <div style={S.statusFace}>
+                <span style={{ color: "rgba(255,255,255,0.4)", fontSize: "13px" }}>Trạng thái:</span>
+                <span style={{ color: employee.has_face ? "#00ff88" : "#ffd600", fontWeight: 700, fontSize: "13px" }}>
+                  {employee.has_face ? "✅ Đã đăng ký" : "⚠️ Chưa đăng ký"}
+                </span>
+              </div>
+            )}
+
+            {/* ── Hướng dẫn ── */}
             <div style={S.guideBox}>
-              <div style={S.guideTitle}>📋 Hướng dẫn đăng ký</div>
+              <div style={S.guideTitle}>📋 Hướng dẫn chụp ảnh đạt chất lượng cao</div>
               <div style={S.guideGrid}>
                 {[
-                  ["1️⃣", "Bật camera"],
-                  ["2️⃣", "Nhìn thẳng, chụp 1 ảnh"],
-                  ["3️⃣", "Xoay nhẹ đầu, chụp thêm"],
-                  ["4️⃣", "Nhấn Lưu khuôn mặt"],
+                  ["1️⃣", "Bật camera, nhìn thẳng"],
+                  ["2️⃣", "Chụp ảnh thứ nhất"],
+                  ["3️⃣", "Xoay đầu nhẹ trái/phải, chụp tiếp"],
+                  ["4️⃣", "Chụp đủ 5 ảnh → Lưu"],
                 ].map(([icon, text]) => (
                   <div key={text} style={S.guideItem}>
-                    <span style={{ fontSize: "20px" }}>{icon}</span>
+                    <span>{icon}</span>
                     <span style={{ color: "rgba(255,255,255,0.7)", fontSize: "13px" }}>{text}</span>
                   </div>
                 ))}
               </div>
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "8px" }}>
+                {["💡 Ánh sáng đủ sáng", "😶 Không đeo khẩu trang", "📐 Cách 40–60cm", "👁 Nhìn vào camera"].map(tip => (
+                  <span key={tip} style={S.tip}>{tip}</span>
+                ))}
+              </div>
             </div>
 
-            {/* Camera */}
-            <div style={S.cameraSection}>
-              <div style={S.videoWrap}>
-                <video ref={videoRef} autoPlay muted playsInline
-                  style={{ width: "100%", height: "100%", objectFit: "cover", display: stream ? "block" : "none" }} />
-                {!stream && (
-                  <div style={S.camPlaceholder}>
-                    <div style={{ fontSize: "48px", marginBottom: "12px" }}>📷</div>
-                    <div style={{ color: "rgba(255,255,255,0.4)", fontSize: "14px" }}>Camera chưa bật</div>
-                  </div>
-                )}
-                {/* Overlay hướng dẫn */}
-                {stream && (
-                  <div style={S.faceGuide}>
-                    <div style={S.faceCircle} />
-                  </div>
+            {/* ── Camera ── */}
+            <div style={S.cameraCard}>
+              <div style={S.stepHeader}>
+                <span style={S.stepNum}>2</span>
+                <span style={S.stepLabel}>Chụp ảnh ({photos.length}/5)</span>
+                {photos.length > 0 && (
+                  <span style={{ marginLeft: "auto", display: "flex", gap: "4px" }}>
+                    {[1,2,3,4,5].map(i => (
+                      <span key={i} style={{ width: 8, height: 8, borderRadius: "50%",
+                        background: i <= photos.length ? "#00ff88" : "rgba(255,255,255,0.15)" }} />
+                    ))}
+                  </span>
                 )}
               </div>
 
-              {/* Nút điều khiển */}
+              <div style={S.videoWrap}>
+                <video ref={videoRef} autoPlay muted playsInline
+                  style={{ width: "100%", height: "100%", objectFit: "cover",
+                    display: stream ? "block" : "none", transform: "scaleX(-1)" }} />
+                {!stream && (
+                  <div style={S.camPlaceholder}>
+                    <div style={{ fontSize: "52px", marginBottom: "10px" }}>📷</div>
+                    <div style={{ color: "rgba(255,255,255,0.35)", fontSize: "14px" }}>Camera chưa bật</div>
+                  </div>
+                )}
+                {stream && (
+                  <div style={S.faceGuide}>
+                    <div style={S.faceOval} />
+                    <div style={S.faceHint}>Đặt mặt vào khung</div>
+                  </div>
+                )}
+                {stream && photos.length < 5 && (
+                  <div style={S.photoCount}>{photos.length}/5</div>
+                )}
+              </div>
+
               <div style={S.controls}>
                 {!stream ? (
-                  <button onClick={startCamera} style={S.btnPrimary}>📷 Bật camera</button>
+                  <button onClick={startCamera} style={{ ...S.btnBlue, flex: 1 }}>
+                    📷 Bật Camera
+                  </button>
                 ) : (
                   <>
                     <button onClick={capture} disabled={capturing || photos.length >= 5}
-                      style={{ ...S.btnPrimary, flex: 1 }}>
+                      style={{ ...S.btnGreen, flex: 1, opacity: (capturing || photos.length >= 5) ? 0.4 : 1 }}>
                       {capturing ? "⏳..." : `📸 Chụp (${photos.length}/5)`}
                     </button>
-                    <button onClick={stopCamera} style={S.btnSecondary}>⏹ Tắt</button>
+                    <button onClick={stopCamera} style={S.btnGray}>⏹ Tắt</button>
                   </>
+                )}
+                {photos.length > 0 && !stream && (
+                  <button onClick={startCamera} style={S.btnGray}>↩ Chụp thêm</button>
                 )}
               </div>
             </div>
 
-            {/* Thông báo */}
+            {/* ── Thông báo ── */}
             {status && (
-              <div style={{
-                ...S.statusBox,
-                borderColor: status.type === "success" ? "rgba(0,255,136,0.3)"
-                  : status.type === "error" ? "rgba(255,92,92,0.3)"
-                  : status.type === "warn" ? "rgba(255,214,0,0.3)"
-                  : "rgba(0,229,255,0.3)",
-                background: status.type === "success" ? "rgba(0,255,136,0.06)"
-                  : status.type === "error" ? "rgba(255,92,92,0.06)"
-                  : status.type === "warn" ? "rgba(255,214,0,0.06)"
-                  : "rgba(0,229,255,0.06)",
-                color: status.type === "success" ? "#00ff88"
-                  : status.type === "error" ? "#ff5c5c"
-                  : status.type === "warn" ? "#ffd600"
-                  : "#00e5ff",
-              }}>
+              <div style={{ border: `1px solid ${C[status.type].border}`, background: C[status.type].bg,
+                color: C[status.type].text, borderRadius: "10px", padding: "12px 16px",
+                fontSize: "14px", fontWeight: 600 }}>
                 {status.msg}
               </div>
             )}
 
-            {/* Ảnh đã chụp */}
+            {/* ── Ảnh đã chụp ── */}
             {photos.length > 0 && (
-              <div style={S.photosSection}>
-                <div style={S.photosTitle}>Ảnh đã chụp ({photos.length}/5)</div>
+              <div style={S.photosCard}>
+                <div style={S.stepHeader}>
+                  <span style={S.stepNum}>3</span>
+                  <span style={S.stepLabel}>Ảnh đã chụp ({photos.length}/5)</span>
+                </div>
                 <div style={S.photosGrid}>
                   {photos.map((photo, i) => (
                     <div key={i} style={S.photoWrap}>
-                      <img src={photo} alt={`Ảnh ${i + 1}`} style={S.photoImg} />
+                      <img src={photo} alt={`Ảnh ${i+1}`} style={S.photoImg} />
                       <button onClick={() => removePhoto(i)} style={S.photoRemove}>✕</button>
-                      <div style={S.photoLabel}>Ảnh {i + 1}</div>
+                      <div style={S.photoLabel}>Ảnh {i+1}</div>
+                    </div>
+                  ))}
+                  {/* Slot trống */}
+                  {Array.from({ length: 5 - photos.length }).map((_, i) => (
+                    <div key={`empty-${i}`} style={S.photoEmpty}>
+                      <span style={{ fontSize: "20px", color: "rgba(255,255,255,0.15)" }}>+</span>
                     </div>
                   ))}
                 </div>
 
-                <button onClick={saveFace} disabled={saving || photos.length === 0}
-                  style={{ ...S.btnSave, opacity: saving ? 0.6 : 1 }}>
-                  {saving ? "⏳ Đang lưu..." : "💾 Lưu khuôn mặt"}
+                <button
+                  type="button"
+                  onClick={saveFace}
+                  disabled={saving || photos.length === 0}
+                  style={{ ...S.btnSave, opacity: saving ? 0.6 : 1 }}
+                >
+                  {saving ? "⏳ Đang xử lý và lưu..." : `💾 Lưu Khuôn Mặt (${photos.length} ảnh)`}
                 </button>
+
+                {photos.length < 3 && (
+                  <div style={{ color: "#ffd600", fontSize: "12px", textAlign: "center" }}>
+                    💡 Nên chụp ít nhất 3 ảnh để nhận diện chính xác hơn
+                  </div>
+                )}
               </div>
             )}
+          </>
+        )}
+      </div>
 
-            {/* Modal đổi mật khẩu */}
+      {/* ── Modal đổi mật khẩu ── */}
       {showPwd && (
-        <div style={S.pwdModal}>
+        <div style={S.overlay} onClick={e => e.target === e.currentTarget && setShowPwd(false)}>
           <div style={S.pwdCard}>
-            <div style={S.pwdTitle}>🔑 Đổi mật khẩu</div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ color: "#fff", fontWeight: 700, fontSize: "18px" }}>🔑 Đổi mật khẩu</div>
+              <button onClick={() => { setShowPwd(false); setPwdStatus(null); setPwdForm({ current: "", next: "", confirm: "" }); }}
+                style={{ background: "none", border: "none", color: "rgba(255,255,255,0.4)", cursor: "pointer", fontSize: "20px" }}>✕</button>
+            </div>
 
-            {["current","next","confirm"].map((key, i) => (
+            {[
+              { key: "current",  label: "Mật khẩu hiện tại",     placeholder: "Nhập mật khẩu hiện tại" },
+              { key: "next",     label: "Mật khẩu mới",          placeholder: "Ít nhất 6 ký tự" },
+              { key: "confirm",  label: "Xác nhận mật khẩu mới", placeholder: "Nhập lại mật khẩu mới" },
+            ].map(({ key, label, placeholder }) => (
               <div key={key} style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                <label style={S.pwdLabel}>
-                  {key === "current" ? "Mật khẩu hiện tại" : key === "next" ? "Mật khẩu mới" : "Xác nhận mật khẩu mới"}
-                </label>
+                <label style={{ color: "rgba(255,255,255,0.5)", fontSize: "12px", fontWeight: 600 }}>{label}</label>
                 <input
                   type="password"
                   value={pwdForm[key]}
                   onChange={e => setPwdForm(p => ({ ...p, [key]: e.target.value }))}
-                  placeholder={key === "current" ? "Nhập mật khẩu hiện tại" : key === "next" ? "Ít nhất 6 ký tự" : "Nhập lại mật khẩu mới"}
+                  placeholder={placeholder}
                   style={S.pwdInput}
                   onKeyDown={e => e.key === "Enter" && changePassword()}
                 />
@@ -332,11 +389,12 @@ export default function RegisterFacePage() {
             )}
 
             <div style={{ display: "flex", gap: "10px" }}>
-              <button onClick={changePassword} disabled={pwdSaving} style={{ ...S.btnPrimary, flex: 1 }}>
+              <button onClick={changePassword} disabled={pwdSaving}
+                style={{ ...S.btnBlue, flex: 1, opacity: pwdSaving ? 0.6 : 1 }}>
                 {pwdSaving ? "⏳ Đang lưu..." : "💾 Xác nhận"}
               </button>
               <button onClick={() => { setShowPwd(false); setPwdStatus(null); setPwdForm({ current: "", next: "", confirm: "" }); }}
-                style={S.btnSecondary}>
+                style={S.btnGray}>
                 Hủy
               </button>
             </div>
@@ -344,157 +402,76 @@ export default function RegisterFacePage() {
         </div>
       )}
 
-      {/* Trạng thái hiện tại */}
-            {employee && (
-              <div style={S.currentStatus}>
-                <span style={{ color: "rgba(255,255,255,0.4)", fontSize: "13px" }}>
-                  Trạng thái khuôn mặt:
-                </span>
-                <span style={{
-                  color: employee.has_face ? "#00ff88" : "#ffd600",
-                  fontWeight: 600, fontSize: "13px"
-                }}>
-                  {employee.has_face ? "✅ Đã đăng ký" : "⚠️ Chưa đăng ký"}
-                </span>
-              </div>
-            )}
-          </>
-        )}
-      </div>
-
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&display=swap');
-        * { -webkit-tap-highlight-color: transparent; }
-        input, select, button { font-size: 16px !important; }
-        * { box-sizing: border-box; }
-        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        button:disabled { cursor: not-allowed; }
+        input, button { font-size: 16px !important; }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
       `}</style>
     </div>
   );
 }
 
 const S = {
-  page: {
-    minHeight: "100vh", background: "linear-gradient(135deg,#0a0e1a,#0d1628)",
-    fontFamily: "'Space Grotesk', sans-serif", color: "#fff",
-    display: "flex", flexDirection: "column",
-  },
-  header: {
-    display: "flex", alignItems: "center", justifyContent: "space-between",
-    padding: "12px 16px", borderBottom: "1px solid rgba(255,255,255,0.07)",
-    background: "rgba(255,255,255,0.02)", flexWrap: "wrap", gap: "8px",
-  },
+  page: { minHeight: "100vh", background: "linear-gradient(135deg,#07101f,#0d1628)", fontFamily: "'Space Grotesk',sans-serif", color: "#fff", display: "flex", flexDirection: "column" },
+
+  // Header
+  header: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", background: "rgba(0,0,0,0.35)", borderBottom: "1px solid rgba(255,255,255,0.07)", flexWrap: "wrap", gap: "10px" },
   headerLeft: { display: "flex", alignItems: "center", gap: "12px" },
-  headerTitle: { color: "#fff", fontWeight: 700, fontSize: "16px" },
+  avatarDot: { width: "40px", height: "40px", borderRadius: "50%", background: "linear-gradient(135deg,#00e5ff,#0066ff)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "18px", color: "#fff", flexShrink: 0 },
+  headerTitle: { color: "#fff", fontWeight: 700, fontSize: "15px" },
   headerSub: { color: "rgba(255,255,255,0.4)", fontSize: "12px", marginTop: "2px" },
-  btnLogout: {
-    background: "rgba(255,92,92,0.1)", border: "1px solid rgba(255,92,92,0.3)",
-    color: "#ff5c5c", borderRadius: "8px", padding: "7px 14px", cursor: "pointer",
-    fontSize: "13px", fontFamily: "inherit",
-  },
-  body: {
-    flex: 1, padding: "16px", maxWidth: "600px", width: "100%",
-    margin: "0 auto", display: "flex", flexDirection: "column", gap: "16px",
-  },
-  guideBox: {
-    background: "rgba(0,229,255,0.04)", border: "1px solid rgba(0,229,255,0.15)",
-    borderRadius: "14px", padding: "16px 20px",
-  },
-  guideTitle: { color: "#00e5ff", fontWeight: 700, fontSize: "14px", marginBottom: "12px" },
-  guideGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" },
-  guideItem: {
-    display: "flex", alignItems: "center", gap: "8px",
-    background: "rgba(255,255,255,0.03)", borderRadius: "8px", padding: "8px 12px",
-  },
-  cameraSection: { display: "flex", flexDirection: "column", gap: "12px" },
-  videoWrap: {
-    position: "relative", width: "100%", aspectRatio: "4/3", background: "#000",
-    borderRadius: "14px", overflow: "hidden", border: "1px solid rgba(255,255,255,0.1)",
-    maxHeight: "360px",
-  },
-  camPlaceholder: {
-    position: "absolute", inset: 0, display: "flex", flexDirection: "column",
-    alignItems: "center", justifyContent: "center",
-  },
-  faceGuide: {
-    position: "absolute", inset: 0, display: "flex",
-    alignItems: "center", justifyContent: "center", pointerEvents: "none",
-  },
-  faceCircle: {
-    width: "180px", height: "220px", border: "2px dashed rgba(0,229,255,0.5)",
-    borderRadius: "50%", boxShadow: "0 0 20px rgba(0,229,255,0.15)",
-  },
+
+  // Body
+  body: { flex: 1, padding: "16px", maxWidth: "560px", width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", gap: "16px" },
+
+  // Buttons
+  btnBlue:   { background: "linear-gradient(135deg,#00e5ff,#0066ff)", color: "#fff", border: "none", borderRadius: "10px", padding: "13px 20px", fontWeight: 700, cursor: "pointer", fontFamily: "inherit", minHeight: "48px" },
+  btnGreen:  { background: "linear-gradient(135deg,#00ff88,#00cc66)", color: "#0a0e1a", border: "none", borderRadius: "10px", padding: "13px 20px", fontWeight: 700, cursor: "pointer", fontFamily: "inherit", minHeight: "48px" },
+  btnGray:   { background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.6)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: "10px", padding: "12px 16px", cursor: "pointer", fontFamily: "inherit" },
+  btnYellow: { background: "rgba(255,214,0,0.1)", border: "1px solid rgba(255,214,0,0.3)", color: "#ffd600", borderRadius: "8px", padding: "8px 14px", cursor: "pointer", fontFamily: "inherit", fontWeight: 600 },
+  btnRed:    { background: "rgba(255,92,92,0.1)", border: "1px solid rgba(255,92,92,0.3)", color: "#ff5c5c", borderRadius: "8px", padding: "8px 14px", cursor: "pointer", fontFamily: "inherit" },
+  btnSave:   { width: "100%", background: "linear-gradient(135deg,#00e5ff,#0066ff)", color: "#fff", border: "none", borderRadius: "12px", padding: "16px", fontWeight: 700, fontSize: "16px", cursor: "pointer", fontFamily: "inherit", minHeight: "54px" },
+
+  // Banner
+  bannerUpgrade: { background: "rgba(0,229,255,0.07)", border: "1px solid rgba(0,229,255,0.25)", borderRadius: "12px", padding: "12px 16px", color: "#00e5ff", fontSize: "13px", display: "flex", alignItems: "flex-start", gap: "10px" },
+  statusFace: { display: "flex", alignItems: "center", gap: "8px", justifyContent: "center", padding: "8px", background: "rgba(255,255,255,0.03)", borderRadius: "10px", border: "1px solid rgba(255,255,255,0.07)" },
+
+  // Guide
+  guideBox: { background: "rgba(0,229,255,0.04)", border: "1px solid rgba(0,229,255,0.12)", borderRadius: "14px", padding: "16px" },
+  guideTitle: { color: "#00e5ff", fontWeight: 700, fontSize: "13px", marginBottom: "12px" },
+  guideGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "8px" },
+  guideItem: { display: "flex", alignItems: "center", gap: "8px", background: "rgba(255,255,255,0.03)", borderRadius: "8px", padding: "8px 10px", fontSize: "13px" },
+  tip: { background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "20px", padding: "4px 10px", fontSize: "12px", color: "rgba(255,255,255,0.5)" },
+
+  // Camera card
+  cameraCard: { background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "14px", padding: "16px", display: "flex", flexDirection: "column", gap: "12px" },
+  stepHeader: { display: "flex", alignItems: "center", gap: "10px" },
+  stepNum: { width: "24px", height: "24px", borderRadius: "50%", background: "#00e5ff", color: "#07101f", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "12px", flexShrink: 0 },
+  stepLabel: { color: "#00e5ff", fontWeight: 700, fontSize: "13px", textTransform: "uppercase", letterSpacing: "0.5px" },
+  videoWrap: { position: "relative", width: "100%", aspectRatio: "4/3", background: "#000", borderRadius: "12px", overflow: "hidden", border: "1px solid rgba(255,255,255,0.1)", maxHeight: "320px" },
+  camPlaceholder: { position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" },
+  faceGuide: { position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", pointerEvents: "none" },
+  faceOval: { width: "160px", height: "200px", border: "2px dashed rgba(0,229,255,0.6)", borderRadius: "50%", boxShadow: "0 0 24px rgba(0,229,255,0.15)" },
+  faceHint: { color: "rgba(0,229,255,0.7)", fontSize: "12px", marginTop: "10px", fontWeight: 600 },
+  photoCount: { position: "absolute", top: "10px", left: "12px", background: "rgba(0,0,0,0.6)", color: "#fff", borderRadius: "20px", padding: "3px 10px", fontSize: "12px", fontWeight: 700 },
   controls: { display: "flex", gap: "10px" },
-  btnPrimary: {
-    background: "linear-gradient(135deg,#00e5ff,#0066ff)", color: "#fff",
-    border: "none", borderRadius: "10px", padding: "14px 20px",
-    fontWeight: 700, fontSize: "14px", cursor: "pointer", fontFamily: "inherit", minHeight: "48px",
-  },
-  btnSecondary: {
-    background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.6)",
-    border: "1px solid rgba(255,255,255,0.1)", borderRadius: "10px", padding: "12px 16px",
-    cursor: "pointer", fontFamily: "inherit", fontSize: "14px",
-  },
-  statusBox: {
-    border: "1px solid", borderRadius: "10px", padding: "12px 16px",
-    fontSize: "14px", fontWeight: 600,
-  },
-  photosSection: {
-    background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)",
-    borderRadius: "14px", padding: "16px 20px", display: "flex", flexDirection: "column", gap: "14px",
-  },
-  photosTitle: { color: "#fff", fontWeight: 700, fontSize: "14px" },
-  photosGrid: { display: "flex", gap: "10px", flexWrap: "wrap" },
-  photoWrap: {
-    position: "relative", width: "100px", height: "100px",
-    borderRadius: "10px", overflow: "hidden", border: "2px solid rgba(0,229,255,0.3)",
-  },
-  photoImg: { width: "100%", height: "100%", objectFit: "cover" },
-  photoRemove: {
-    position: "absolute", top: "4px", right: "4px",
-    background: "rgba(255,92,92,0.8)", color: "#fff", border: "none",
-    borderRadius: "50%", width: "20px", height: "20px", cursor: "pointer",
-    fontSize: "11px", display: "flex", alignItems: "center", justifyContent: "center",
-  },
-  photoLabel: {
-    position: "absolute", bottom: 0, left: 0, right: 0,
-    background: "rgba(0,0,0,0.5)", color: "#fff", fontSize: "11px",
-    textAlign: "center", padding: "2px",
-  },
-  btnSave: {
-    background: "linear-gradient(135deg,#00ff88,#00cc66)", color: "#0a0e1a",
-    border: "none", borderRadius: "10px", padding: "15px",
-    fontWeight: 700, fontSize: "15px", cursor: "pointer", fontFamily: "inherit", minHeight: "52px",
-  },
-  successBox: {
-    display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-    minHeight: "400px", textAlign: "center",
-  },
-  btnChangePwd: {
-    background: "rgba(255,214,0,0.1)", border: "1px solid rgba(255,214,0,0.3)",
-    color: "#ffd600", borderRadius: "8px", padding: "7px 14px", cursor: "pointer",
-    fontSize: "13px", fontFamily: "inherit", fontWeight: 600,
-  },
-  pwdModal: {
-    position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)",
-    display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000,
-    padding: "20px",
-  },
-  pwdCard: {
-    background: "#0d1628", border: "1px solid rgba(255,255,255,0.1)",
-    borderRadius: "16px", padding: "28px 24px",
-    width: "100%", maxWidth: "400px",
-    display: "flex", flexDirection: "column", gap: "16px",
-    boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
-  },
-  pwdTitle: { color: "#fff", fontWeight: 700, fontSize: "18px" },
-  pwdLabel: { color: "rgba(255,255,255,0.5)", fontSize: "12px", fontWeight: 600 },
-  pwdInput: {
-    background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)",
-    borderRadius: "8px", padding: "11px 14px", color: "#fff",
-    fontSize: "14px", fontFamily: "inherit",
-  },
-  currentStatus: {
-    display: "flex", alignItems: "center", gap: "8px", justifyContent: "center",
-  },
+
+  // Photos
+  photosCard: { background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "14px", padding: "16px", display: "flex", flexDirection: "column", gap: "14px" },
+  photosGrid: { display: "flex", gap: "8px", flexWrap: "wrap" },
+  photoWrap: { position: "relative", width: "88px", height: "88px", borderRadius: "10px", overflow: "hidden", border: "2px solid rgba(0,229,255,0.4)" },
+  photoImg: { width: "100%", height: "100%", objectFit: "cover", transform: "scaleX(-1)" },
+  photoRemove: { position: "absolute", top: "3px", right: "3px", background: "rgba(255,92,92,0.85)", color: "#fff", border: "none", borderRadius: "50%", width: "20px", height: "20px", cursor: "pointer", fontSize: "10px", display: "flex", alignItems: "center", justifyContent: "center" },
+  photoLabel: { position: "absolute", bottom: 0, left: 0, right: 0, background: "rgba(0,0,0,0.55)", color: "#fff", fontSize: "10px", textAlign: "center", padding: "2px" },
+  photoEmpty: { width: "88px", height: "88px", borderRadius: "10px", border: "2px dashed rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "center" },
+
+  // Success
+  successBox: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "40px 20px", textAlign: "center" },
+
+  // Password modal
+  overlay: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "20px" },
+  pwdCard: { background: "#0d1628", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "16px", padding: "24px", width: "100%", maxWidth: "400px", display: "flex", flexDirection: "column", gap: "16px", boxShadow: "0 24px 64px rgba(0,0,0,0.6)" },
+  pwdInput: { background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: "8px", padding: "12px 14px", color: "#fff", fontFamily: "inherit", width: "100%" },
 };
