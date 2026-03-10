@@ -167,7 +167,10 @@ export default function Realtime() {
       const data = res.data;
       const event = { ...data, success: true, timestamp: new Date().toISOString() };
       setResult(event);
-      setFeed(prev => [event, ...prev].slice(0, 30));
+      // Chỉ thêm vào feed nếu WebSocket không kết nối — tránh trùng với WS broadcast
+      if (wsRef.current?.readyState !== WebSocket.OPEN) {
+        setFeed(prev => [event, ...prev].slice(0, 30));
+      }
       // Tắt autoScan sau check-in/check-out thành công, tránh quét lại ngay
       setAutoScan(false);
       // Tự động bật lại sau 10 giây
