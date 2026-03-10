@@ -52,13 +52,13 @@ async def lifespan(app: FastAPI):
             admin = models.User(
                 username="admin",
                 email="admin@faceattend.com",
-                password=hash_password("123456"),
+                password=hash_password("Admin@123"),
                 role="admin",
                 is_active=True,
             )
             db.add(admin)
             db.commit()
-            print("[INIT] Tạo tài khoản admin: admin / 123456")
+            print("[INIT] Tạo tài khoản admin: admin / Admin@123")
     finally:
         db.close()
 
@@ -71,50 +71,112 @@ async def lifespan(app: FastAPI):
     finally:
         db2.close()
 
+    # ── Catch-up: chạy bù nếu server bị ngủ lúc 00:05 ─────────────────────────
+    # Kiểm tra xem hôm qua đã có record absent/auto-checkout chưa.
+    # Nếu chưa (server ngủ) thì chạy ngay khi wake up.
+    try:
+        from database import SessionLocal as _SL
+        from datetime import datetime, timezone, timedelta as _td
+        _VN = timezone(_td(hours=7))
+        _now = datetime.now(_VN)
+        _yesterday = (_now - _td(days=1)).date().isoformat()
+        _db = _SL()
+        try:
+            # Nếu có ít nhất 1 nhân viên active mà không có record nào ngày hôm qua
+            # → job chưa chạy → chạy bù ngay
+            _active_count = _db.query(models.Employee).filter(
+                models.Employee.is_active == True
+            ).count()
+            _attended_count = _db.query(models.Attendance).filter(
+                models.Attendance.date == _yesterday
+            ).count()
+            # Chỉ chạy bù nếu: có nhân viên active VÀ không có record nào hôm qua
+            # (tránh chạy lại khi đã có dữ liệu rồi)
+            if _active_count > 0 and _attended_count == 0:
+                print(f"[INIT] Phát hiện ngày {_yesterday} chưa xử lý — chạy bù auto_end_of_day")
+                auto_end_of_day()
+            else:
+                print(f"[INIT] Catch-up check: ngày {_yesterday} đã có {_attended_count} record, bỏ qua")
+        finally:
+            _db.close()
+    except Exception as _e:
+        print(f"[INIT] Catch-up lỗi (bỏ qua): {_e}")
+
+    # Khởi động scheduler bên trong lifespan — đảm bảo restart đúng khi Render wake up
+    scheduler = BackgroundScheduler(timezone="Asia/Ho_Chi_Minh")
+    scheduler.add_job(auto_end_of_day, CronTrigger(hour=0, minute=5))
+    scheduler.start()
+    print("[INIT] Scheduler khởi động — auto checkout + mark absent lúc 00:05 hàng ngày")
+
     yield
 
-# ── Auto checkout cuối ngày ──────────────────────────────────────────────────
-def auto_checkout_yesterday():
-    """Chạy lúc 00:05 — tự động checkout các ca chưa checkout ngày hôm trước."""
+    scheduler.shutdown(wait=False)
+    print("[SHUTDOWN] Scheduler đã dừng")
+
+# ── Auto checkout + Mark absent cuối ngày ────────────────────────────────────
+def auto_end_of_day():
+    """
+    Chạy lúc 00:05 mỗi ngày:
+    1. Auto checkout các ca chưa checkout ngày hôm trước → check_out = 23:59:59
+    2. Tạo record absent cho nhân viên active không có record ngày hôm qua
+    """
     from database import SessionLocal
     import models
     from datetime import datetime, timezone, timedelta
 
-    VN_TZ = timezone(timedelta(hours=7))
-    now = datetime.now(VN_TZ)
+    VN_TZ     = timezone(timedelta(hours=7))
+    now       = datetime.now(VN_TZ)
     yesterday = (now - timedelta(days=1)).date().isoformat()
+    eod       = datetime(now.year, now.month, now.day, 0, 0, 0, tzinfo=VN_TZ) - timedelta(seconds=1)
 
     db = SessionLocal()
     try:
-        # Lấy tất cả record hôm qua chưa có checkout
-        missing = db.query(models.Attendance).filter(
+        # 1. Auto checkout
+        missing_checkout = db.query(models.Attendance).filter(
             models.Attendance.date == yesterday,
             models.Attendance.check_out.is_(None),
         ).all()
-
-        # Gán checkout = 23:59:59 của ngày hôm qua
-        eod = datetime(now.year, now.month, now.day, 0, 0, 0, tzinfo=VN_TZ) - timedelta(seconds=1)
-        for rec in missing:
+        for rec in missing_checkout:
             rec.check_out = eod
-            rec.note = "Auto checkout cuối ngày"
+            rec.note = (rec.note or "") + " | Auto checkout cuối ngày"
         db.commit()
-        print(f"[AutoCheckout] {len(missing)} bản ghi ngày {yesterday} được checkout tự động")
+        print(f"[AutoCheckout] {len(missing_checkout)} bản ghi ngày {yesterday} checkout tự động")
+
+        # 2. Mark absent — nhân viên active không có bất kỳ record nào ngày hôm qua
+        all_active = db.query(models.Employee).filter(
+            models.Employee.is_active == True
+        ).all()
+        attended_ids = {
+            row.employee_id for row in
+            db.query(models.Attendance.employee_id).filter(
+                models.Attendance.date == yesterday
+            ).all()
+        }
+        absent_count = 0
+        for emp in all_active:
+            if emp.id not in attended_ids:
+                db.add(models.Attendance(
+                    employee_id = emp.id,
+                    date        = yesterday,
+                    status      = "absent",
+                    check_in    = None,
+                    check_out   = None,
+                    note        = "Vắng mặt (tự động)",
+                ))
+                absent_count += 1
+        db.commit()
+        print(f"[MarkAbsent] {absent_count} nhân viên vắng ngày {yesterday}")
+
     except Exception as e:
-        print(f"[AutoCheckout] Lỗi: {e}")
+        print(f"[AutoEndOfDay] Lỗi: {e}")
         db.rollback()
     finally:
         db.close()
 
 
-# Khởi động scheduler
-_scheduler = BackgroundScheduler(timezone="Asia/Ho_Chi_Minh")
-_scheduler.add_job(auto_checkout_yesterday, CronTrigger(hour=0, minute=5))
-_scheduler.start()
-
-
 app = FastAPI(
-    title="Hệ Thống Chấm Công Tự Động",
-    description="API nhận diện khuôn mặt & quản lý chấm công",
+    title="Hệ Thống Điểm Danh Khuôn Mặt",
+    description="API nhận diện khuôn mặt & quản lý điểm danh",
     version="1.0.0",
     lifespan=lifespan,
 )
