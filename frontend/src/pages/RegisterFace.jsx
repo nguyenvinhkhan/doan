@@ -50,6 +50,9 @@ export default function RegisterFace() {
       streamRef.current = s;
       if (videoRef.current) {
         videoRef.current.srcObject = s;
+        videoRef.current.setAttribute("playsinline", "true");
+        videoRef.current.setAttribute("webkit-playsinline", "true");
+        await videoRef.current.play().catch(() => {});
       }
       setStream(true);
       setStatus({ type: "info", msg: "Camera đã bật. Nhìn thẳng vào camera và nhấn Chụp." });
@@ -72,18 +75,22 @@ export default function RegisterFace() {
     setStream(false);
   };
 
+  const [capturing, setCapturing] = useState(false);
   const capture = useCallback(() => {
-    if (!videoRef.current || !stream) return;
+    if (!videoRef.current || !stream || capturing) return;
     if (photos.length >= 5) return;
+    if (!videoRef.current.videoWidth) return;
+    setCapturing(true);
     const canvas = canvasRef.current;
     const MAX_SIZE = 640;
-    const vw = videoRef.current.videoWidth  || 640;
-    const vh = videoRef.current.videoHeight || 480;
+    const vw = videoRef.current.videoWidth;
+    const vh = videoRef.current.videoHeight;
     const scale = Math.min(1, MAX_SIZE / Math.max(vw, vh));
     canvas.width  = Math.round(vw * scale);
     canvas.height = Math.round(vh * scale);
-    canvas.getContext("2d").drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.75);
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.80);
     setPhotos(prev => {
       const next = [...prev, dataUrl];
       if (next.length < 5) {
@@ -91,7 +98,8 @@ export default function RegisterFace() {
       }
       return next;
     });
-  }, [stream, photos.length]);
+    setTimeout(() => setCapturing(false), 600);
+  }, [stream, photos.length, capturing]);
 
   const removePhoto = (idx) => {
     setPhotos(prev => prev.filter((_, i) => i !== idx));
@@ -192,9 +200,9 @@ export default function RegisterFace() {
                 <button onClick={startCamera} style={S.btnStart}>▶ Bật Camera</button>
               ) : (
                 <>
-                  <button onClick={capture} disabled={photos.length >= 5}
-                    style={{ ...S.btnCapture, flex: 1, opacity: photos.length >= 5 ? 0.4 : 1 }}>
-                    📸 Chụp ({photos.length}/5)
+                  <button onClick={capture} disabled={photos.length >= 5 || capturing}
+                    style={{ ...S.btnCapture, flex: 1, opacity: (photos.length >= 5 || capturing) ? 0.4 : 1 }}>
+                    {capturing ? "⏳..." : `📸 Chụp (${photos.length}/5)`}
                   </button>
                   <button onClick={stopCamera} style={S.btnSecondary}>⏹ Tắt</button>
                 </>

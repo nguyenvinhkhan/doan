@@ -75,45 +75,40 @@ export default function Realtime() {
   }, []);
 
   // Bật webcam
- // Bật webcam
   const startWebcam = async () => {
-    // HTTP trên mobile không có mediaDevices → báo lỗi rõ ràng
     if (!navigator.mediaDevices?.getUserMedia) {
-      alert("Trình duyệt không hỗ trợ camera.\nHãy dùng HTTPS hoặc Chrome/Safari mới nhất.");
+      setResult({ success: false, code: "CAM_ERROR", message: "❌ Trình duyệt không hỗ trợ camera. Dùng HTTPS + Chrome/Safari mới nhất." });
       return;
     }
     try {
       let s;
-      // Thử lần 1: front camera + resolution
       try {
         s = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: { ideal: "user" }, width: { ideal: 1280 }, height: { ideal: 720 } },
-          audio: false,
         });
       } catch {
-        // Thử lần 2: chỉ front camera, bỏ resolution
         try {
-          s = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: "user" },
-            audio: false,
-          });
+          s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
         } catch {
-          // Thử lần 3: bất kỳ camera nào
-          s = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+          s = await navigator.mediaDevices.getUserMedia({ video: true });
         }
       }
       streamRef.current = s;
       if (videoRef.current) {
         videoRef.current.srcObject = s;
+        videoRef.current.src = "";
+        videoRef.current.setAttribute("playsinline", "true");
+        videoRef.current.setAttribute("webkit-playsinline", "true");
+        await videoRef.current.play().catch(() => {});
       }
       setStream(true);
     } catch (err) {
-      const msg =
-        err.name === "NotAllowedError"  ? "Chưa cấp quyền camera. Vào Cài đặt > Trình duyệt > Camera để cho phép." :
-        err.name === "NotFoundError"    ? "Không tìm thấy camera trên thiết bị." :
-        err.name === "NotReadableError" ? "Camera đang được ứng dụng khác dùng." :
-        `Không thể mở camera: ${err.message}`;
-      alert(msg);
+      const msg = err.name === "NotAllowedError"
+        ? "❌ Chưa cấp quyền camera. Vào Cài đặt trình duyệt để cho phép."
+        : err.name === "NotFoundError"
+        ? "❌ Không tìm thấy camera trên thiết bị."
+        : `❌ Không thể mở camera: ${err.message}`;
+      setResult({ success: false, code: "CAM_ERROR", message: msg });
     }
   };
 
@@ -150,12 +145,21 @@ export default function Realtime() {
 
   // Chụp & nhận diện
   const capture = useCallback(async () => {
-    if (!videoRef.current || scanning) return;
+    if (scanning) return;
+    // Xác định nguồn hình: webcam hoặc IP camera (dùng imgRef)
+    const source = isIPMode ? imgRef.current : videoRef.current;
+    if (!source) return;
+    if (!isIPMode && !videoRef.current?.videoWidth) return; // video chưa load
     const canvas = canvasRef.current;
-    canvas.width  = videoRef.current.videoWidth  || 640;
-    canvas.height = videoRef.current.videoHeight || 480;
-    canvas.getContext("2d").drawImage(videoRef.current, 0, 0);
-    const image_base64 = canvas.toDataURL("image/jpeg", 0.85);
+    // Resize về tối đa 640px — giảm payload, tăng tốc độ gửi lên server
+    const MAX_SIZE = 640;
+    const rawW = isIPMode ? (imgRef.current.naturalWidth  || 640) : videoRef.current.videoWidth;
+    const rawH = isIPMode ? (imgRef.current.naturalHeight || 480) : videoRef.current.videoHeight;
+    const scale = Math.min(1, MAX_SIZE / Math.max(rawW, rawH));
+    canvas.width  = Math.round(rawW * scale);
+    canvas.height = Math.round(rawH * scale);
+    canvas.getContext("2d").drawImage(source, 0, 0, canvas.width, canvas.height);
+    const image_base64 = canvas.toDataURL("image/jpeg", 0.82);
 
     setScanning(true);
     try {
@@ -188,12 +192,18 @@ export default function Realtime() {
     }
   }, [scanning]);
 
-  // Auto scan
+  // Auto scan — dùng setTimeout thay vì setInterval để tránh requests chồng nhau
   useEffect(() => { autoRef.current = autoScan; }, [autoScan]);
   useEffect(() => {
     if (!autoScan) return;
-    const iv = setInterval(() => { if (autoRef.current) capture(); }, 3000);
-    return () => clearInterval(iv);
+    let timer;
+    const loop = () => {
+      if (!autoRef.current) return;
+      capture();
+      timer = setTimeout(loop, 3500); // 3.5s đủ để server xử lý + trả về
+    };
+    timer = setTimeout(loop, 1000); // delay 1s trước khi bắt đầu
+    return () => clearTimeout(timer);
   }, [autoScan, capture]);
 
   const toggleAuto = () => setAutoScan(a => !a);
@@ -282,7 +292,6 @@ export default function Realtime() {
             <video
               ref={videoRef}
               autoPlay muted playsInline
-              webkit-playsinline="true"
               crossOrigin="anonymous"
               style={{ ...S.video, display: (stream && !isIPMode) ? "block" : "none" }}
             />

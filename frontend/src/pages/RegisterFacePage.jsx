@@ -36,28 +36,29 @@ export default function RegisterFacePage() {
 
   // ── Camera ────────────────────────────────────────────────────────────────
   const startCamera = async () => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setStatus({ type: "error", msg: "❌ Trình duyệt không hỗ trợ camera. Hãy dùng HTTPS hoặc Chrome/Safari mới nhất." });
+      return;
+    }
     try {
-      // Thử camera trước mặt (front) — quan trọng trên mobile
-      const constraints = {
-        video: {
-          facingMode: { ideal: "user" },
-          width:  { ideal: 1280, min: 480 },
-          height: { ideal: 720,  min: 360 },
-        },
-        audio: false,
-      };
       let s;
       try {
-        s = await navigator.mediaDevices.getUserMedia(constraints);
+        s = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "user" }, width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: false,
+        });
       } catch {
-        // Fallback: thử không ép facingMode (iOS Safari đôi khi cần vậy)
-        s = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        try {
+          s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false });
+        } catch {
+          s = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        }
       }
       streamRef.current = s;
       if (videoRef.current) {
         videoRef.current.srcObject = s;
-        // Đảm bảo video play trên iOS
-        videoRef.current.setAttribute("playsinline", true);
+        videoRef.current.setAttribute("playsinline", "true");
+        videoRef.current.setAttribute("webkit-playsinline", "true");
         await videoRef.current.play().catch(() => {});
       }
       setStream(true);
@@ -65,6 +66,10 @@ export default function RegisterFacePage() {
     } catch (err) {
       const msg = err.name === "NotAllowedError"
         ? "❌ Chưa cấp quyền camera. Vào Cài đặt > Trình duyệt > Camera để cho phép."
+        : err.name === "NotFoundError"
+        ? "❌ Không tìm thấy camera trên thiết bị này."
+        : err.name === "NotReadableError"
+        ? "❌ Camera đang được ứng dụng khác sử dụng. Hãy đóng lại và thử lại."
         : `❌ Không thể mở camera: ${err.message}`;
       setStatus({ type: "error", msg });
     }
@@ -87,17 +92,22 @@ export default function RegisterFacePage() {
   // ── Chụp ảnh ─────────────────────────────────────────────────────────────
   const capture = useCallback(() => {
     if (!videoRef.current || capturing || photos.length >= 5) return;
+    if (!videoRef.current.videoWidth) return; // video chưa load xong
     setCapturing(true);
     const canvas = canvasRef.current;
-    // Giới hạn kích thước tối đa 640px để trớnh payload quá lớn trên mobile
     const MAX_SIZE = 640;
-    const vw = videoRef.current.videoWidth  || 640;
-    const vh = videoRef.current.videoHeight || 480;
+    const vw = videoRef.current.videoWidth;
+    const vh = videoRef.current.videoHeight;
     const scale = Math.min(1, MAX_SIZE / Math.max(vw, vh));
     canvas.width  = Math.round(vw * scale);
     canvas.height = Math.round(vh * scale);
-    canvas.getContext("2d").drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.75);
+    const ctx = canvas.getContext("2d");
+    // Mirror lại để khớp với video (transform: scaleX(-1))
+    ctx.translate(canvas.width, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+    ctx.setTransform(1, 0, 0, 1, 0, 0); // reset transform
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.80);
     setPhotos(prev => {
       const next = [...prev, dataUrl];
       if (next.length < 5) {
@@ -105,7 +115,7 @@ export default function RegisterFacePage() {
       }
       return next;
     });
-    setTimeout(() => setCapturing(false), 400);
+    setTimeout(() => setCapturing(false), 600);
   }, [capturing, photos.length]);
 
   const removePhoto = (idx) => {
