@@ -171,10 +171,9 @@ export default function Realtime() {
       if (wsRef.current?.readyState !== WebSocket.OPEN) {
         setFeed(prev => [event, ...prev].slice(0, 30));
       }
-      // Tắt autoScan sau check-in/check-out thành công, tránh quét lại ngay
+      // Dừng auto scan sau mỗi lần nhận diện thành công
+      // User tự bật lại khi muốn tiếp tục
       setAutoScan(false);
-      // Tự động bật lại sau 10 giây
-      setTimeout(() => setAutoScan(true), 10000);
     } catch (err) {
       const detail = err.response?.data?.detail;
       const code   = typeof detail === "object" ? detail?.code  : "UNKNOWN";
@@ -186,9 +185,9 @@ export default function Realtime() {
                   : (code === "LOW_CONFIDENCE" || code === "AMBIGUOUS") ? 3000
                   : (code === "ALREADY_CHECKED_OUT") ? 5000
                   : 3000;
+      // Dừng auto scan khi gặp lỗi cần xử lý (không tự bật lại)
       if (err.response?.status === 404 || err.response?.status === 400) {
         setAutoScan(false);
-        setTimeout(() => setAutoScan(true), delay);
       }
     } finally {
       setScanning(false);
