@@ -109,7 +109,7 @@ export default function RegisterFace() {
     if (!selected) { setStatus({ type: "error", msg: "⚠️ Vui lòng chọn nhân viên trước" }); return; }
     if (photos.length === 0) { setStatus({ type: "error", msg: "⚠️ Vui lòng chụp ít nhất 1 ảnh" }); return; }
     setSaving(true);
-    setStatus({ type: "info", msg: "⏳ Đang xử lý và lưu khuôn mặt..." });
+    setStatus({ type: "info", msg: "⏳ Đang xử lý... Render free tier có thể mất 20–40 giây, vui lòng đợi." });
     try {
       const res = await api.post(`/employees/${selected}/register-face`, { images_base64: photos });
       setStatus({ type: "success", msg: `✅ Đăng ký thành công! Đã lưu ${res.data.encodings_count} encoding.` });

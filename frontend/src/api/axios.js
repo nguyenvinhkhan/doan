@@ -5,7 +5,7 @@ const BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
 // Instance dùng cho các route cần đăng nhập admin/viewer (/api/...)
 const api = axios.create({
   baseURL: BASE + "/api",
-  timeout: 15000,
+  timeout: 60000, // 60s — đủ cho register-face xử lý nhiều ảnh
 });
 
 api.interceptors.request.use((config) => {
@@ -29,7 +29,7 @@ api.interceptors.response.use(
 // Instance dùng cho nhân viên (/api/...) — lưu token riêng, redirect về /employee-login
 export const employeeApi = axios.create({
   baseURL: BASE + "/api",
-  timeout: 15000,
+  timeout: 60000, // 60s — đủ cho register-face xử lý nhiều ảnh
 });
 
 employeeApi.interceptors.request.use((config) => {
@@ -53,7 +53,7 @@ employeeApi.interceptors.response.use(
 // Instance dùng cho các route công khai (/public/...)
 export const publicApi = axios.create({
   baseURL: BASE,
-  timeout: 15000,
+  timeout: 20000, // 20s cho face-checkin
 });
 
 export default api;

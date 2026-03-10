@@ -127,7 +127,7 @@ export default function RegisterFacePage() {
   const saveFace = async () => {
     if (!photos.length) return;
     setSaving(true);
-    setStatus({ type: "info", msg: "⏳ Đang xử lý và lưu khuôn mặt..." });
+    setStatus({ type: "info", msg: "⏳ Đang xử lý... Render free tier có thể mất 20–40 giây, vui lòng đợi." });
     try {
       const res = await employeeApi.post(
         `/employees/${employee.id}/register-face`,
