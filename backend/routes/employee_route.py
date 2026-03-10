@@ -145,10 +145,16 @@ def delete_employee(
     emp = db.query(models.Employee).filter(models.Employee.id == employee_id).first()
     if not emp:
         raise HTTPException(status_code=404, detail="Không tìm thấy nhân viên")
-    # Xóa bản ghi điểm danh liên quan trước
+    # Xóa theo đúng thứ tự để tránh foreign key violation:
+    # 1. Attendance (tham chiếu employee)
     db.query(models.Attendance).filter(
         models.Attendance.employee_id == employee_id
-    ).delete()
+    ).delete(synchronize_session=False)
+    # 2. User có employee_id trỏ vào nhân viên này
+    db.query(models.User).filter(
+        models.User.employee_id == employee_id
+    ).delete(synchronize_session=False)
+    # 3. Sau đó mới xóa employee
     db.delete(emp)
     db.commit()
 
