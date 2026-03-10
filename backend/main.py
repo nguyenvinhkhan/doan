@@ -23,9 +23,9 @@ def run_migrations():
                 END IF;
                 IF NOT EXISTS (
                     SELECT 1 FROM information_schema.columns
-                    WHERE table_name='attendance' AND column_name='note'
+                    WHERE table_name='attendances' AND column_name='note'
                 ) THEN
-                    ALTER TABLE attendance ADD COLUMN note TEXT;
+                    ALTER TABLE attendances ADD COLUMN note TEXT;
                 END IF;
             END$$;
         """))
@@ -52,13 +52,13 @@ async def lifespan(app: FastAPI):
             admin = models.User(
                 username="admin",
                 email="admin@faceattend.com",
-                password=hash_password("Admin@123"),
+                password=hash_password("123456"),
                 role="admin",
                 is_active=True,
             )
             db.add(admin)
             db.commit()
-            print("[INIT] Tạo tài khoản admin: admin / Admin@123")
+            print("[INIT] Tạo tài khoản admin: admin / 123456")
     finally:
         db.close()
 
@@ -113,8 +113,8 @@ _scheduler.start()
 
 
 app = FastAPI(
-    title="Hệ Thống Điểm Danh Khuôn Mặt",
-    description="API nhận diện khuôn mặt & quản lý điểm danh",
+    title="Hệ Thống Chấm Công Tự Động",
+    description="API nhận diện khuôn mặt & quản lý chấm công",
     version="1.0.0",
     lifespan=lifespan,
 )
