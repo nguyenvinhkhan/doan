@@ -188,9 +188,16 @@ def register_face(
         print(f"[DEBUG] Ảnh {i+1}: len={len(img)}, prefix={prefix}")
 
     encodings = get_face_encodings_multi(images)
-    print(f"[DEBUG] Encodings tìm được: {len(encodings) if encodings else 0}")
+    found = len(encodings) if encodings else 0
+    print(f"[DEBUG] Encodings tìm được: {found} / {len(images)} ảnh")
     if not encodings:
-        raise HTTPException(status_code=422, detail="Không phát hiện khuôn mặt trong ảnh nào")
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "NO_FACE_DETECTED",
+                "msg": f"Không phát hiện khuôn mặt trong {len(images)} ảnh. Đảm bảo: khuôn mặt rõ, đủ sáng, không đeo khẩu trang, nhìn thẳng vào camera.",
+            }
+        )
 
     # Lưu list of encodings (định dạng mới, tương thích ngược)
     emp.face_encoding = json.dumps(encodings)

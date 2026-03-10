@@ -140,8 +140,19 @@ export default function RegisterFacePage() {
       setTimeout(() => navigate("/checkin"), 3000);
     } catch (err) {
       const detail = err.response?.data?.detail;
-      const msg = typeof detail === "object" ? detail?.msg : (detail || "Lưu thất bại. Thử chụp lại ảnh rõ hơn.");
-      setStatus({ type: "error", msg: "❌ " + msg });
+      let msg;
+      if (typeof detail === "object" && detail?.msg) {
+        msg = detail.msg;
+      } else if (typeof detail === "string") {
+        msg = detail;
+      } else {
+        msg = "Lưu thất bại. Vui lòng thử lại.";
+      }
+      setStatus({
+        type: "error",
+        msg: "❌ " + msg,
+        tips: !detail || detail?.code === "NO_FACE_DETECTED",
+      });
     } finally {
       setSaving(false);
     }
@@ -332,6 +343,14 @@ export default function RegisterFacePage() {
                 color: C[status.type].text, borderRadius: "10px", padding: "12px 16px",
                 fontSize: "14px", fontWeight: 600 }}>
                 {status.msg}
+                {status.tips && (
+                  <ul style={{ margin: "8px 0 0", paddingLeft: "18px", fontWeight: 400, fontSize: "13px", opacity: 0.85 }}>
+                    <li>Khuôn mặt phải chiếm ít nhất 1/3 khung hình</li>
+                    <li>Ánh sáng đủ sáng, không ngược sáng</li>
+                    <li>Không đeo khẩu trang hoặc kính râm</li>
+                    <li>Nhìn thẳng vào camera, không nghiêng quá nhiều</li>
+                  </ul>
+                )}
               </div>
             )}
 

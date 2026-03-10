@@ -118,12 +118,18 @@ export default function RegisterFace() {
       const r = await api.get("/employees/?is_active=true&limit=200");
       setEmployees(r.data);
     } catch (err) {
-      const msg = err.response?.data?.detail || "Đăng ký thất bại";
-      setStatus({
-        type: "error",
-        msg: `❌ ${msg}`,
-        tips: msg.includes("khuôn mặt") || msg.includes("face"),
-      });
+      const detail = err.response?.data?.detail;
+      let msg;
+      if (typeof detail === "object" && detail?.msg) {
+        msg = detail.msg;
+      } else if (typeof detail === "string") {
+        msg = detail;
+      } else {
+        msg = "Đăng ký thất bại. Vui lòng thử lại.";
+      }
+      const isNoFace = !detail || detail?.code === "NO_FACE_DETECTED"
+        || (typeof msg === "string" && (msg.includes("khuôn mặt") || msg.includes("face")));
+      setStatus({ type: "error", msg: `❌ ${msg}`, tips: isNoFace });
     } finally {
       setSaving(false);
     }
