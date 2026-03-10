@@ -177,3 +177,25 @@ def get_today_feed(db: Session = Depends(get_db)):
             })
     feed.sort(key=lambda x: x["time"] or "", reverse=True)
     return feed[:50]
+
+@router.get("/debug/encoding-info")
+def debug_encoding_info(db: Session = Depends(get_db)):
+    """Endpoint tạm — kiểm tra encoding dimension trong DB."""
+    import json
+    employees = db.query(models.Employee).filter(
+        models.Employee.face_encoding.isnot(None)
+    ).all()
+    result = []
+    for emp in employees:
+        try:
+            stored = json.loads(emp.face_encoding)
+            if isinstance(stored[0], list):
+                dim = len(stored[0])
+                count = len(stored)
+            else:
+                dim = len(stored)
+                count = 1
+            result.append({"name": emp.full_name, "encodings": count, "dim": dim})
+        except Exception as e:
+            result.append({"name": emp.full_name, "error": str(e)})
+    return {"employees": result}
