@@ -90,7 +90,7 @@ export default function RegisterFace() {
     canvas.height = Math.round(vh * scale);
     const ctx = canvas.getContext("2d");
     ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.80);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
     setPhotos(prev => {
       const next = [...prev, dataUrl];
       if (next.length < 5) {

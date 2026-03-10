@@ -102,12 +102,9 @@ export default function RegisterFacePage() {
     canvas.width  = Math.round(vw * scale);
     canvas.height = Math.round(vh * scale);
     const ctx = canvas.getContext("2d");
-    // Mirror lại để khớp với video (transform: scaleX(-1))
-    ctx.translate(canvas.width, 0);
-    ctx.scale(-1, 1);
+    // Vẽ ảnh KHÔNG mirror — gửi đúng chiều cho AI nhận diện
     ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-    ctx.setTransform(1, 0, 0, 1, 0, 0); // reset transform
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.80);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
     setPhotos(prev => {
       const next = [...prev, dataUrl];
       if (next.length < 5) {

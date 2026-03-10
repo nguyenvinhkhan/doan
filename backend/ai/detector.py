@@ -248,7 +248,7 @@ def unified_face_match(
     second_sim = scores[1][1] if len(scores) > 1 else 0.0
     margin = best_sim - second_sim
 
-    is_match = best_sim >= threshold and (len(scores) == 1 or margin >= 0.03)
+    is_match = best_sim >= threshold and (len(scores) == 1 or margin >= 0.02)
 
     print(f"[AI] best={best_sim:.3f} second={second_sim:.3f} margin={margin:.3f}")
 
