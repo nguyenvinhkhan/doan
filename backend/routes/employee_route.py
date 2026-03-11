@@ -5,7 +5,7 @@ from typing import List, Optional
 from database import get_db
 from schemas import EmployeeCreate, EmployeeUpdate, EmployeeOut
 from auth import get_current_user, require_admin, hash_password
-from ai.detector import get_face_encoding, get_face_encodings_multi
+from ai.detector import get_face_encoding, get_face_encodings_multi, cache_update, cache_delete
 import models
 import json
 
@@ -207,6 +207,7 @@ def register_face(
 
     # Lưu list of encodings (định dạng mới, tương thích ngược)
     emp.face_encoding = json.dumps(encodings)
+    cache_update(emp.id, emp.face_encoding)
     db.add(emp)
     db.commit()
     db.refresh(emp)

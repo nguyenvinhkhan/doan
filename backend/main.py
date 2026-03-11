@@ -7,6 +7,7 @@ from database import Base, engine
 from routes import auth_route, employee_route, attendance_route, config_route, public_route, export_route, proxy_route
 from websocket import router as ws_router
 import models  # noqa: F401
+from ai.detector import cache_load_all
 
 def run_migrations():
     """Thêm các cột mới vào bảng đã tồn tại nếu chưa có."""
@@ -52,13 +53,13 @@ async def lifespan(app: FastAPI):
             admin = models.User(
                 username="admin",
                 email="admin@faceattend.com",
-                password=hash_password("Admin@123"),
+                password=hash_password("123456"),
                 role="admin",
                 is_active=True,
             )
             db.add(admin)
             db.commit()
-            print("[INIT] Tạo tài khoản admin: admin / Admin@123")
+            print("[INIT] Tạo tài khoản admin: admin / 123456")
     finally:
         db.close()
 
@@ -70,6 +71,17 @@ async def lifespan(app: FastAPI):
         print("[INIT] Khởi tạo cấu hình mặc định xong")
     finally:
         db2.close()
+
+    # Load encodings vào RAM cache
+    db3 = SessionLocal()
+    try:
+        active_emps = db3.query(models.Employee).filter(
+            models.Employee.is_active == True,
+            models.Employee.face_encoding != None
+        ).all()
+        cache_load_all(active_emps)
+    finally:
+        db3.close()
 
     # ── Catch-up: chạy bù nếu server bị ngủ lúc 00:05 ─────────────────────────
     # Kiểm tra xem hôm qua đã có record absent/auto-checkout chưa.

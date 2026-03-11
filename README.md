@@ -1,161 +1,202 @@
-# 🎯 FaceAttend — Hệ Thống Điểm Danh Khuôn Mặt
+# FaceAttend — Hệ Thống Điểm Danh Khuôn Mặt
 
-Hệ thống điểm danh thông minh sử dụng nhận diện khuôn mặt thời gian thực.
+Hệ thống chấm công nhận diện khuôn mặt thời gian thực, xây dựng bằng FastAPI + React + OpenCV. Hỗ trợ đăng ký khuôn mặt, điểm danh tự động qua webcam/mobile, báo cáo xuất Excel và quản lý nhân viên đầy đủ.
+
+**Demo:** https://doan-pi.vercel.app/
 
 ---
 
-## 🏗️ Kiến Trúc
+## Tính năng
+
+- Nhận diện khuôn mặt realtime qua webcam (PC & mobile)
+- Đăng ký khuôn mặt với 5 ảnh + augmentation (tối đa 25 encodings/nhân viên)
+- Check-in / Check-out tự động, ghi nhận đúng giờ / trễ / vắng
+- WebSocket broadcast kết quả điểm danh realtime
+- Auto checkout + mark vắng lúc 00:05 hàng ngày (có catch-up khi server restart)
+- Dashboard thống kê theo tháng + biểu đồ
+- Xuất báo cáo Excel
+- Quản lý nhân viên, tài khoản, cấu hình hệ thống
+- JWT authentication (admin + nhân viên)
+
+---
+
+## Kiến trúc
+
+```
+Webcam / Mobile
+      ↓
+React + Vite (Frontend)
+      ↓  REST API + WebSocket
+FastAPI (Backend)
+      ↓
+OpenCV — LBP Face Recognition
+      ↓
+PostgreSQL (Database)
+```
 
 ```
 doan/
-├── backend/                  # FastAPI + Python
-│   ├── ai/
-│   │   └── detector.py       # Face detection & recognition (face_recognition / dlib)
-│   ├── routes/
-│   │   ├── auth_route.py     # Đăng nhập, đăng ký tài khoản
-│   │   ├── employee_route.py # CRUD nhân viên, đăng ký khuôn mặt
-│   │   └── attendance_route.py # Điểm danh bằng khuôn mặt, thống kê
-│   ├── main.py               # FastAPI app entry point
-│   ├── database.py           # PostgreSQL connection (SQLAlchemy)
-│   ├── models.py             # ORM models: User, Employee, Attendance
+├── backend/
+│   ├── main.py               # FastAPI app + scheduler auto-checkout/absent
+│   ├── database.py           # SQLAlchemy + PostgreSQL
+│   ├── models.py             # ORM: Employee, Attendance, User, Config
 │   ├── schemas.py            # Pydantic schemas
 │   ├── auth.py               # JWT authentication
-│   ├── websocket.py          # WebSocket realtime
-│   └── requirements.txt
-└── frontend/                 # React 18 + Vite
+│   ├── websocket.py          # WebSocket broadcast realtime
+│   ├── ai/
+│   │   └── detector.py       # LBP face detection & recognition (6400-dim)
+│   └── routes/
+│       ├── public_route.py   # /face-checkin (không cần token)
+│       ├── employee_route.py # CRUD nhân viên + đăng ký mặt
+│       ├── attendance_route.py
+│       ├── config_route.py
+│       ├── auth_route.py
+│       └── export_route.py
+└── frontend/
     └── src/
-        ├── pages/
-        │   ├── Login.jsx         # Trang đăng nhập
-        │   ├── Dashboard.jsx     # Thống kê tổng quan + biểu đồ
-        │   ├── Realtime.jsx      # Camera + điểm danh realtime
-        │   ├── Employees.jsx     # Quản lý nhân viên
-        │   ├── RegisterFace.jsx  # Đăng ký khuôn mặt
-        │   └── Admin.jsx         # Lịch sử & quản trị
-        ├── components/Navbar.jsx
+        ├── App.jsx
+        ├── api/axios.js       # Axios instances (api / employeeApi / publicApi)
         ├── context/AuthContext.jsx
-        └── api/axios.js
+        └── pages/
+            ├── Login.jsx
+            ├── Dashboard.jsx
+            ├── Realtime.jsx          # Điểm danh realtime
+            ├── RegisterFace.jsx      # Admin đăng ký mặt
+            ├── RegisterFacePage.jsx  # Nhân viên tự đăng ký
+            ├── Employees.jsx
+            └── Admin.jsx
 ```
 
 ---
 
-## 🚀 Cài Đặt & Chạy
+## AI — Nhận diện khuôn mặt
 
-### Yêu Cầu
-- Python 3.10+
-- Node.js 18+
-- PostgreSQL 14+
-- cmake (để cài dlib/face_recognition)
+Thuật toán: **LBP Histogram + Cosine Similarity**
+
+- Phát hiện mặt: Haar Cascade (frontal + alt2 + profile), fallback nhiều điều kiện ánh sáng
+- Encoding: LBP 5×5 grid × 256 bins = **6400 chiều**
+- So sánh: Top-3 voting (70% top1 + 30% avg top3)
+- Threshold: **0.72** (có thể chỉnh trong Admin → Config)
+- Augmentation khi đăng ký: brightness ×4 biến thể → tối đa 25 encodings/nhân viên
+- EXIF rotation fix cho ảnh mobile
+
+| Tiêu chí | Giá trị |
+|---|---|
+| Encoding dimension | 6400 |
+| Threshold mặc định | 0.72 |
+| Tốc độ inference | ~200ms/ảnh (CPU) |
+| Encodings/nhân viên | tối đa 25 |
+
+---
+
+## Stack
+
+| Thành phần | Công nghệ |
+|---|---|
+| Backend | FastAPI 0.111, Python 3.11 |
+| Database | PostgreSQL + SQLAlchemy 2.0 |
+| AI | OpenCV 4.9, NumPy, Pillow |
+| Frontend | React 18, Vite, Axios |
+| Auth | JWT (python-jose) |
+| Realtime | WebSocket (websockets) |
+| Scheduler | APScheduler |
+| Export | openpyxl |
+| Deploy |Vercel (Frontend) + Render (Backend) |
+
+---
+
+## Cài đặt local
 
 ### Backend
 
 ```bash
 cd backend
-
-# Tạo virtual environment
 python -m venv venv
-source venv/bin/activate       # Linux/Mac
-# venv\Scripts\activate        # Windows
-
-# Cài dependencies
+source venv/bin/activate       # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
-# Cấu hình môi trường
+# Tạo file .env
 cp .env.example .env
-# Sửa DATABASE_URL và SECRET_KEY trong .env
+# Chỉnh DATABASE_URL và SECRET_KEY trong .env
 
-# Tạo database
-createdb face_attendance
-
-# Chạy server
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+uvicorn main:app --reload --port 8000
 ```
-
-> **Lưu ý:** `face_recognition` yêu cầu `dlib`. Nếu gặp lỗi cài đặt:
-> ```bash
-> # Ubuntu/Debian
-> sudo apt-get install cmake libopenblas-dev liblapack-dev
-> pip install dlib face_recognition
-> ```
 
 ### Frontend
 
 ```bash
 cd frontend
-
 npm install
-
-cp .env.example .env
-
 npm run dev
-# Mở http://localhost:5173
+```
+
+Truy cập: http://localhost:5173
+
+---
+
+## Biến môi trường
+
+### Backend (`.env`)
+
+```env
+DATABASE_URL=postgresql://user:password@host/dbname
+SECRET_KEY=your-secret-key
+```
+
+### Frontend (`.env.production`)
+
+```env
+VITE_API_URL=https://your-backend.onrender.com
+VITE_WS_URL=wss://your-backend.onrender.com/ws
 ```
 
 ---
 
-## 📖 API Endpoints
+## Deploy
 
-### Auth
-| Method | URL | Mô tả |
-|--------|-----|-------|
-| POST | `/api/auth/login` | Đăng nhập |
-| POST | `/api/auth/register` | Tạo tài khoản admin |
-| GET  | `/api/auth/me` | Thông tin user hiện tại |
+### Backend — Render.com (Web Service)
 
-### Nhân viên
-| Method | URL | Mô tả |
-|--------|-----|-------|
-| GET  | `/api/employees/` | Danh sách (có filter search, dept) |
-| POST | `/api/employees/` | Thêm nhân viên |
-| PUT  | `/api/employees/{id}` | Sửa nhân viên |
-| DELETE | `/api/employees/{id}` | Xóa nhân viên |
+- **Build command:** `pip install -r requirements.txt`
+- **Start command:** `uvicorn main:app --host 0.0.0.0 --port $PORT`
+- **Environment variables:** `DATABASE_URL`, `SECRET_KEY`
+
+### Frontend — Vercel
+
+- **Project:** https://vercel.com/nguyenvinhkhans-projects/chamcong
+- **Build command:** `npm run build`
+- **Output directory:** `dist`
+- **Environment variables:** `VITE_API_URL`, `VITE_WS_URL`
+
+---
+
+## Tài khoản mặc định
+
+Sau khi deploy, tài khoản admin mặc định:
+
+| Username | Password |
+|---|---|
+| admin | Admin@123 |
+
+> ⚠️ Đổi mật khẩu ngay sau khi đăng nhập lần đầu.
+
+---
+
+## API chính
+
+| Method | Endpoint | Mô tả |
+|---|---|---|
+| POST | `/api/auth/login` | Đăng nhập admin |
+| GET | `/api/employees/` | Danh sách nhân viên |
 | POST | `/api/employees/{id}/register-face` | Đăng ký khuôn mặt |
-
-### Điểm danh
-| Method | URL | Mô tả |
-|--------|-----|-------|
-| POST | `/api/attendance/face-checkin` | Điểm danh bằng ảnh khuôn mặt |
-| GET  | `/api/attendance/` | Lịch sử (filter date, employee) |
-| GET  | `/api/attendance/stats/summary` | Thống kê tháng |
-| GET  | `/api/attendance/stats/daily` | Thống kê theo ngày (cho chart) |
-
-### WebSocket
-```
-ws://localhost:8000/ws/attendance
-```
-Nhận events realtime khi có điểm danh mới.
+| POST | `/public/face-checkin` | Điểm danh (không cần token) |
+| GET | `/api/attendance/` | Lịch sử điểm danh |
+| GET | `/api/export/excel` | Xuất báo cáo Excel |
+| WS | `/ws` | WebSocket realtime |
 
 ---
 
-## ✨ Tính Năng
+## Lưu ý
 
-- **Nhận diện khuôn mặt** — So sánh với database sử dụng FaceNet/dlib
-- **Check-in / Check-out** — Tự động phát hiện lần vào và ra
-- **Phát hiện đi trễ** — Sau 08:30 tự động đánh dấu "late"
-- **Realtime WebSocket** — Thông báo ngay khi có điểm danh
-- **Dashboard thống kê** — Biểu đồ theo ngày và tháng
-- **Tự động quét** — Camera quét liên tục mỗi 3 giây
-- **Quản lý nhân viên** — CRUD đầy đủ + filter + search
-- **JWT Authentication** — Phân quyền admin / viewer
-
----
-
-## 🔒 Bảo Mật
-
-- Mật khẩu hash bằng **bcrypt**
-- Token **JWT** với thời hạn 8 giờ
-- Route admin được bảo vệ bởi `require_admin` dependency
-- CORS chỉ cho phép origin đã cấu hình
-
----
-
-## 🛠️ Công Nghệ
-
-| Layer | Công nghệ |
-|-------|-----------|
-| Backend | FastAPI, SQLAlchemy, Alembic |
-| Database | PostgreSQL |
-| AI | face_recognition, dlib, NumPy, Pillow |
-| Auth | python-jose (JWT), passlib (bcrypt) |
-| Frontend | React 18, Vite, React Router 6 |
-| Charts | Recharts |
-| Realtime | WebSocket (native FastAPI) |
+- Render free tier sleep sau 15 phút không có request — lần đầu truy cập có thể chờ ~30 giây
+- Sau khi cập nhật `detector.py`, toàn bộ nhân viên cần đăng ký lại khuôn mặt vì encoding format thay đổi
+- Nên đăng ký mặt bằng PC/laptop để đảm bảo chất lượng ảnh tốt nhất
