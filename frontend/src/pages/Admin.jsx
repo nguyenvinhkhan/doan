@@ -299,6 +299,31 @@ export default function Admin() {
             </div>
           </div>
 
+          {/* Bảo mật */}
+          <div style={styles.configSection}>
+            <div style={styles.sectionHeader}>
+              <span style={styles.sectionIcon}>🔒</span>
+              <div>
+                <div style={styles.sectionTitle}>Bảo mật điểm danh</div>
+                <div style={styles.sectionDesc}>Giới hạn IP được phép gọi API điểm danh</div>
+              </div>
+            </div>
+            <div style={styles.configGrid}>
+              {configs.filter(c => c.key === "allowed_ips").map(c => (
+                <ConfigField key={c.key} config={c} onChange={handleConfigChange} onSave={handleSaveConfig} saving={saving} />
+              ))}
+            </div>
+            <div style={styles.previewBox}>
+              <span style={{ color: "rgba(255,255,255,0.4)", fontSize: "13px" }}>
+                📌 Để trống = không giới hạn. Ví dụ:{" "}
+              </span>
+              <span style={{ color: "#00e5ff", fontWeight: 700, fontSize: "13px" }}>192.168.1.0/24</span>
+              <span style={{ color: "rgba(255,255,255,0.4)", fontSize: "13px" }}>
+                {" "}hoặc nhiều IP cách nhau bằng dấu phẩy
+              </span>
+            </div>
+          </div>
+
           {/* Nút lưu tất cả */}
           <div style={styles.saveAllRow}>
             {saveMsg && (

@@ -61,6 +61,31 @@ def _check_employee_cooldown(emp_id: int):
         _emp_cooldown[emp_id] = now
 
 
+# ── IP Whitelist ──────────────────────────────────────────────────────────────
+def _check_ip_whitelist(ip: str, db):
+    """Kiểm tra IP có trong whitelist không. Nếu whitelist rỗng thì cho phép tất cả."""
+    raw = get_config(db, "allowed_ips")
+    if not raw or not raw.strip():
+        return
+    import ipaddress
+    allowed = [x.strip() for x in raw.split(",") if x.strip()]
+    try:
+        client = ipaddress.ip_address(ip)
+        for entry in allowed:
+            try:
+                if client in ipaddress.ip_network(entry, strict=False):
+                    return
+            except ValueError:
+                if ip == entry:
+                    return
+    except ValueError:
+        pass
+    raise HTTPException(status_code=403, detail={
+        "code": "IP_NOT_ALLOWED",
+        "msg":  f"Thiết bị không được phép điểm danh từ mạng này ({ip}).",
+    })
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.post("/face-checkin")
@@ -71,9 +96,10 @@ async def public_face_checkin(
 ):
     """Điểm danh công khai — không cần token."""
 
-    # Rate limit theo IP
+    # Rate limit + IP whitelist
     client_ip = request.client.host if request.client else "unknown"
     _check_rate_limit(client_ip)
+    _check_ip_whitelist(client_ip, db)
 
     now   = datetime.now(VN_TZ)
     today = now.date().isoformat()

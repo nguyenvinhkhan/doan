@@ -33,6 +33,11 @@ DEFAULT_CONFIGS = [
         "value": "0.75",
         "label": "Ngưỡng nhận diện khuôn mặt (0.0 - 1.0)",
     },
+    {
+        "key": "allowed_ips",
+        "value": "",
+        "label": "IP được phép điểm danh (để trống = không giới hạn). VD: 192.168.1.0/24,10.0.0.1",
+    },
 ]
 
 
