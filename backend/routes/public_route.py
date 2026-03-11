@@ -21,17 +21,15 @@ router = APIRouter()
 
 
 # ── Rate Limiter đơn giản (in-memory, per-IP) ─────────────────────────────────
-# Cho phép tối đa MAX_CALLS lần gọi trong TIME_WINDOW giây mỗi IP
-_rate_data: dict = {}        # {ip: [timestamp, ...]}
+_rate_data: dict = {}
 _rate_lock = threading.Lock()
-MAX_CALLS   = 5              # max 5 lần checkin
-TIME_WINDOW = 10             # trong 10 giây
+MAX_CALLS   = 5
+TIME_WINDOW = 10
 
 def _check_rate_limit(ip: str):
     now = time.time()
     with _rate_lock:
         timestamps = _rate_data.get(ip, [])
-        # Giữ lại chỉ những request trong TIME_WINDOW gần nhất
         timestamps = [t for t in timestamps if now - t < TIME_WINDOW]
         if len(timestamps) >= MAX_CALLS:
             raise HTTPException(
@@ -43,6 +41,24 @@ def _check_rate_limit(ip: str):
             )
         timestamps.append(now)
         _rate_data[ip] = timestamps
+
+
+# ── Cooldown per-employee ─────────────────────────────────────────────────────
+_emp_cooldown: dict = {}
+_cooldown_lock = threading.Lock()
+EMP_COOLDOWN = 30  # giây
+
+def _check_employee_cooldown(emp_id: int):
+    now = time.time()
+    with _cooldown_lock:
+        last = _emp_cooldown.get(emp_id, 0)
+        remaining = EMP_COOLDOWN - (now - last)
+        if remaining > 0:
+            raise HTTPException(status_code=429, detail={
+                "code": "EMPLOYEE_COOLDOWN",
+                "msg":  f"Vừa điểm danh xong. Vui lòng chờ {int(remaining)} giây.",
+            })
+        _emp_cooldown[emp_id] = now
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -87,6 +103,9 @@ async def public_face_checkin(
 
     best_emp = result["employee"]
     best_sim = result["confidence"]
+
+    # ── Cooldown per-employee (chặn check-in/out liên tiếp cùng người) ────────
+    _check_employee_cooldown(best_emp.id)
 
     # ── Ghi chấm công ─────────────────────────────────────────────────────────
     record = db.query(models.Attendance).filter(
@@ -177,6 +196,7 @@ def get_today_feed(db: Session = Depends(get_db)):
             })
     feed.sort(key=lambda x: x["time"] or "", reverse=True)
     return feed[:50]
+
 
 @router.get("/debug/encoding-info")
 def debug_encoding_info(db: Session = Depends(get_db)):
