@@ -213,7 +213,7 @@ app.include_router(proxy_route.router,      prefix="/proxy",          tags=["Pro
 app.include_router(public_route.router,     prefix="/public",         tags=["Public"])
 app.include_router(ws_router,               prefix="/ws",             tags=["WebSocket"])
 
-@app.get("/health")
+@app.api_route("/health", methods=["GET", "HEAD"])
 def health_check():
     """Endpoint ping — dùng cho UptimeRobot để giữ server không sleep."""
     from datetime import datetime, timezone, timedelta
