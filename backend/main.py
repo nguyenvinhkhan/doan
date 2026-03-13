@@ -213,6 +213,12 @@ app.include_router(proxy_route.router,      prefix="/proxy",          tags=["Pro
 app.include_router(public_route.router,     prefix="/public",         tags=["Public"])
 app.include_router(ws_router,               prefix="/ws",             tags=["WebSocket"])
 
+@app.get("/health")
+def health_check():
+    """Endpoint ping — dùng cho UptimeRobot để giữ server không sleep."""
+    from datetime import datetime, timezone, timedelta
+    return {"status": "ok", "time": datetime.now(timezone(timedelta(hours=7))).isoformat()}
+
 @app.get("/")
 def root():
     return {"message": "Face Attendance API is running 🚀"}
