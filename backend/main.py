@@ -84,8 +84,6 @@ async def lifespan(app: FastAPI):
         db3.close()
 
     # ── Catch-up: chạy bù nếu server bị ngủ lúc 00:05 ─────────────────────────
-    # Kiểm tra xem hôm qua đã có record absent/auto-checkout chưa.
-    # Nếu chưa (server ngủ) thì chạy ngay khi wake up.
     try:
         from database import SessionLocal as _SL
         from datetime import datetime, timezone, timedelta as _td
@@ -94,27 +92,34 @@ async def lifespan(app: FastAPI):
         _yesterday = (_now - _td(days=1)).date().isoformat()
         _db = _SL()
         try:
-            # Nếu có ít nhất 1 nhân viên active mà không có record nào ngày hôm qua
-            # → job chưa chạy → chạy bù ngay
-            _active_count = _db.query(models.Employee).filter(
+            # Lấy danh sách nhân viên active
+            _active_emps = _db.query(models.Employee).filter(
                 models.Employee.is_active == True
-            ).count()
-            _attended_count = _db.query(models.Attendance).filter(
-                models.Attendance.date == _yesterday
-            ).count()
-            # Chỉ chạy bù nếu: có nhân viên active VÀ không có record nào hôm qua
-            # (tránh chạy lại khi đã có dữ liệu rồi)
-            if _active_count > 0 and _attended_count == 0:
-                print(f"[INIT] Phát hiện ngày {_yesterday} chưa xử lý — chạy bù auto_end_of_day")
+            ).all()
+            _active_count = len(_active_emps)
+
+            # Lấy danh sách employee_id đã có record ngày hôm qua
+            _attended_ids = {
+                row.employee_id for row in
+                _db.query(models.Attendance.employee_id).filter(
+                    models.Attendance.date == _yesterday
+                ).all()
+            }
+
+            # Nhân viên chưa có record ngày hôm qua
+            _missing = [e for e in _active_emps if e.id not in _attended_ids]
+
+            if _active_count > 0 and len(_missing) > 0:
+                print(f"[INIT] {len(_missing)}/{_active_count} nhân viên chưa có record ngày {_yesterday} — chạy bù auto_end_of_day")
                 auto_end_of_day()
             else:
-                print(f"[INIT] Catch-up check: ngày {_yesterday} đã có {_attended_count} record, bỏ qua")
+                print(f"[INIT] Catch-up check: ngày {_yesterday} đủ {_active_count} record, bỏ qua")
         finally:
             _db.close()
     except Exception as _e:
         print(f"[INIT] Catch-up lỗi (bỏ qua): {_e}")
 
-    # Khởi động scheduler bên trong lifespan — đảm bảo restart đúng khi Render wake up
+    # Khởi động scheduler bên trong lifespan
     scheduler = BackgroundScheduler(timezone="Asia/Ho_Chi_Minh")
     scheduler.add_job(auto_end_of_day, CronTrigger(hour=0, minute=5))
     scheduler.start()
