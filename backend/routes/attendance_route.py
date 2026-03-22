@@ -34,7 +34,7 @@ def list_attendance(
         q = q.filter(models.Attendance.employee_id == employee_id)
     if status:
         q = q.filter(models.Attendance.status == status)
-    return q.order_by(models.Attendance.check_in.desc()).offset(skip).limit(limit).all()
+    return q.order_by(models.Attendance.date.desc(), models.Attendance.check_in.desc()).offset(skip).limit(limit).all()
 
 
 @router.get("/stats/summary")

@@ -43,6 +43,12 @@ export default function Dashboard() {
       setDaily(d.data);
       setRecent(r.data);
     }).finally(() => setLoading(false));
+
+    // Polling 15 giây — cập nhật điểm danh gần đây
+    const pollTimer = setInterval(() => {
+      api.get("/attendance/?limit=10").then(r => setRecent(r.data)).catch(() => {});
+    }, 15000);
+    return () => clearInterval(pollTimer);
   }, []);
 
   if (loading) return <Loader />;

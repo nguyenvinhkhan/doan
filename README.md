@@ -203,9 +203,9 @@ Sau khi deploy, tài khoản admin mặc định:
 
 ---
 
-## Chạy demo
+## Demo
 
-### Cách 1 — Frontend local + Backend Render (không cần cài Python)
+### 1 — Frontend local + Backend Render (không cần cài Python)
 
 Dùng khi chỉ muốn chạy thử giao diện, backend dùng server production sẵn có.
 
@@ -228,7 +228,7 @@ Truy cập: http://localhost:5173
 
 ---
 
-### Cách 2 — Frontend local + Backend local (full local)
+### 2 — Frontend local + Backend local (full local)
 
 Dùng khi muốn phát triển, debug hoặc chạy offline.
 
@@ -241,7 +241,7 @@ CREATE DATABASE face_attendance;
 
 **Bước 2** — Tạo `backend/.env`:
 ```env
-DATABASE_URL=postgresql://postgres:123456@localhost:5432/face_attendance
+DATABASE_URL=postgresql://postgres:YourPassword@localhost:5432/face_attendance
 SECRET_KEY=local-dev-secret-key
 ACCESS_TOKEN_EXPIRE_MINUTES=480
 ```
@@ -271,7 +271,7 @@ npm run dev
 
 Truy cập: http://localhost:5173 — đăng nhập `admin / 123456`
 
-> `.env.local` được Vite ưu tiên hơn `.env.production` nên không cần sửa file production.
+
 
 ---
 
